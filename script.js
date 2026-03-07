@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-10';
+const BUILD_VERSION = 'racing v2026.03.07-11';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -120,6 +120,7 @@ let currentTrackKey = 'stadium';
 let curve = null;
 let mapBounds = { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
 let checkpoints = [];
+let trackLength = 1;
 let startP = new THREE.Vector3();
 let startDir = new THREE.Vector3(0, 0, 1);
 let roadMesh = null;
@@ -174,6 +175,7 @@ function setTrack(trackKey = 'classic') {
   currentTrackKey = TRACKS[trackKey] ? trackKey : 'classic';
   const pts = TRACKS[currentTrackKey];
   curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.08);
+  trackLength = Math.max(1, curve.getLength());
   mapBounds = pts.reduce((acc, p) => ({
     minX: Math.min(acc.minX, p.x),
     maxX: Math.max(acc.maxX, p.x),
@@ -210,6 +212,10 @@ function setTrack(trackKey = 'classic') {
 const carRoot = new THREE.Group();
 scene.add(carRoot);
 
+// opponent car
+const rivalRoot = new THREE.Group();
+scene.add(rivalRoot);
+
 // fallback if model fails
 const fallback = new THREE.Mesh(
   new THREE.BoxGeometry(8.2, 1.6, 15.0),
@@ -217,6 +223,13 @@ const fallback = new THREE.Mesh(
 );
 fallback.position.y = 1.4;
 carRoot.add(fallback);
+
+const rivalFallback = new THREE.Mesh(
+  new THREE.BoxGeometry(7.8, 1.5, 14.2),
+  new THREE.MeshStandardMaterial({ color: '#ff7a7a', roughness: 0.45, metalness: 0.2 })
+);
+rivalFallback.position.y = 1.4;
+rivalRoot.add(rivalFallback);
 
 const loader = new GLTFLoader();
 const draco = new DRACOLoader();
@@ -258,6 +271,27 @@ let currentCarKey = carSelect?.value || 'ferrari';
 let currentCarStats = CAR_MODELS[currentCarKey]?.stats || CAR_MODELS.ferrari.stats;
 let currentCarYawOffset = CAR_MODELS[currentCarKey]?.yawOffset || 0;
 
+const RIVAL_MODELS = {
+  lowpoly1: {
+    type: 'fbx',
+    url: './assets/cars/lowpoly/car_1.fbx',
+    texture: './assets/cars/lowpoly/car_texture_1.png',
+    rotFix: { x: -Math.PI / 2, y: 0, z: 0 },
+    yawOffset: -Math.PI / 2,
+    tint: '#ff8b7a',
+  },
+  lowpoly2: {
+    type: 'fbx',
+    url: './assets/cars/lowpoly/car_2.fbx',
+    texture: './assets/cars/lowpoly/car_texture_2.png',
+    rotFix: { x: -Math.PI / 2, y: 0, z: 0 },
+    yawOffset: -Math.PI / 2,
+    tint: '#7ab6ff',
+  },
+};
+
+let currentRivalYawOffset = RIVAL_MODELS.lowpoly2.yawOffset;
+
 function updateCarStatsUI() {
   const cfg = CAR_MODELS[currentCarKey] || CAR_MODELS.ferrari;
   const s = cfg.stats;
@@ -293,6 +327,47 @@ function prepareModel(model, extraRotationY = 0, rotFix = null) {
 
 function setFallbackVisible(visible) {
   fallback.visible = visible;
+}
+
+function pickRivalKey() {
+  return currentCarKey === 'lowpoly2' ? 'lowpoly1' : 'lowpoly2';
+}
+
+function loadRivalModel() {
+  const key = pickRivalKey();
+  const cfg = RIVAL_MODELS[key] || RIVAL_MODELS.lowpoly2;
+  currentRivalYawOffset = cfg.yawOffset || 0;
+
+  fbxLoader.load(
+    cfg.url,
+    (model) => {
+      const tex = cfg.texture ? texLoader.load(cfg.texture) : null;
+      if (tex) {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.flipY = false;
+      }
+
+      model.traverse((obj) => {
+        if (!obj.isMesh) return;
+        const base = Array.isArray(obj.material) ? obj.material[0] : obj.material;
+        obj.material = new THREE.MeshStandardMaterial({
+          map: tex || null,
+          color: new THREE.Color(cfg.tint || '#ff8b7a').multiply(base?.color || new THREE.Color('#ffffff')),
+          roughness: 0.72,
+          metalness: 0.14,
+        });
+      });
+
+      rivalRoot.clear();
+      rivalRoot.add(prepareModel(model, Math.PI, cfg.rotFix));
+    },
+    undefined,
+    () => {
+      rivalRoot.clear();
+      rivalRoot.add(rivalFallback);
+      currentRivalYawOffset = 0;
+    }
+  );
 }
 
 function loadCarModel(key = 'ferrari') {
@@ -368,11 +443,13 @@ function syncCarSelectors(value) {
 carSelect?.addEventListener('change', () => {
   syncCarSelectors(carSelect.value);
   loadCarModel(carSelect.value);
+  loadRivalModel();
 });
 
 startCarSelect?.addEventListener('change', () => {
   syncCarSelectors(startCarSelect.value);
   loadCarModel(startCarSelect.value);
+  loadRivalModel();
 });
 
 startRaceBtn?.addEventListener('click', () => {
@@ -380,6 +457,7 @@ startRaceBtn?.addEventListener('click', () => {
   const selectedCar = startCarSelect?.value || 'ferrari';
   syncCarSelectors(selectedCar);
   loadCarModel(selectedCar);
+  loadRivalModel();
   raceStarted = true;
   if (startMenu) startMenu.style.display = 'none';
   setupAudio();
@@ -416,6 +494,18 @@ const state = {
   offroadAllWheels: false,
   prevGateDist: 0,
   startGateArmed: false,
+};
+
+const rival = {
+  t: 0.31,
+  speed: 112,
+  x: 0,
+  z: 0,
+  heading: 0,
+  ox: 0,
+  oz: 0,
+  ovx: 0,
+  ovz: 0,
 };
 
 const keys = new Set();
@@ -513,6 +603,10 @@ function drawMiniMap() {
   mm.fillStyle = '#ffd86b';
   mm.beginPath(); mm.arc(cpM.x, cpM.y, 4.5, 0, Math.PI * 2); mm.fill();
 
+  const rivalM = mapToMini(rival.x, rival.z);
+  mm.fillStyle = '#ff8b7a';
+  mm.beginPath(); mm.arc(rivalM.x, rivalM.y, 3.5, 0, Math.PI * 2); mm.fill();
+
   const carM = mapToMini(state.x, state.z);
   mm.fillStyle = '#5fe4ff';
   mm.beginPath(); mm.arc(carM.x, carM.y, 4, 0, Math.PI * 2); mm.fill();
@@ -538,6 +632,17 @@ function resetCar() {
   const gateDelta = new THREE.Vector2(state.x - startP.x, state.z - startP.z);
   state.prevGateDist = gateDelta.dot(gateFwd);
 
+  rival.t = 0.31;
+  rival.ox = 0;
+  rival.oz = 0;
+  rival.ovx = 0;
+  rival.ovz = 0;
+  const rp = curve.getPointAt(rival.t);
+  const rp2 = curve.getPointAt((rival.t + 0.002) % 1);
+  rival.x = rp.x;
+  rival.z = rp.z;
+  rival.heading = Math.atan2(rp2.x - rp.x, rp2.z - rp.z);
+
   // clear skid marks + smoke
   skidMarks.length = 0;
   while (skidGroup.children.length) skidGroup.remove(skidGroup.children[0]);
@@ -547,6 +652,7 @@ function resetCar() {
 
 syncCarSelectors(currentCarKey);
 loadCarModel(currentCarKey);
+loadRivalModel();
 if (trackSelect) trackSelect.value = 'stadium';
 setTrack('stadium');
 
@@ -764,6 +870,55 @@ function tick(now) {
   state.x += state.vx * dt;
   state.z += state.vz * dt;
 
+  // rival AI follows racing line
+  rival.t = (rival.t + (rival.speed * dt) / trackLength) % 1;
+  const rb = curve.getPointAt(rival.t);
+  const rb2 = curve.getPointAt((rival.t + 0.002) % 1);
+  const rbx = rb2.x - rb.x;
+  const rbz = rb2.z - rb.z;
+  const rbl = Math.hypot(rbx, rbz) || 1;
+  const rvxBase = (rbx / rbl) * rival.speed;
+  const rvzBase = (rbz / rbl) * rival.speed;
+
+  // spring back to line for smooth bounce return
+  rival.ovx += (-rival.ox * 7.5 - rival.ovx * 3.6) * dt;
+  rival.ovz += (-rival.oz * 7.5 - rival.ovz * 3.6) * dt;
+  rival.ox += rival.ovx * dt;
+  rival.oz += rival.ovz * dt;
+
+  rival.x = rb.x + rival.ox;
+  rival.z = rb.z + rival.oz;
+  rival.heading = Math.atan2(rbx, rbz);
+
+  // player vs rival collision (mutual bounce)
+  const dxPR = state.x - rival.x;
+  const dzPR = state.z - rival.z;
+  const distPR = Math.hypot(dxPR, dzPR) || 0.0001;
+  const minDist = 12.5;
+  if (distPR < minDist) {
+    const nx = dxPR / distPR;
+    const nz = dzPR / distPR;
+    const push = (minDist - distPR);
+
+    state.x += nx * push * 0.58;
+    state.z += nz * push * 0.58;
+    rival.ox -= nx * push * 0.42;
+    rival.oz -= nz * push * 0.42;
+
+    const playerV = new THREE.Vector2(state.vx, state.vz);
+    const rivalV = new THREE.Vector2(rvxBase + rival.ovx, rvzBase + rival.ovz);
+    const relN = (playerV.x - rivalV.x) * nx + (playerV.y - rivalV.y) * nz;
+
+    if (relN < 0) {
+      const j = -relN * 0.72;
+      state.vx += nx * j;
+      state.vz += nz * j;
+      rival.ovx -= nx * j * 0.85;
+      rival.ovz -= nz * j * 0.85;
+      state.yawRate += (Math.random() - 0.5) * 0.25;
+    }
+  }
+
 
 
   // skid mark trigger (hard brake / lateral slip)
@@ -827,6 +982,8 @@ function tick(now) {
   // place meshes
   carRoot.position.set(state.x, 0, state.z);
   carRoot.rotation.y = state.heading + currentCarYawOffset;
+  rivalRoot.position.set(rival.x, 0, rival.z);
+  rivalRoot.rotation.y = rival.heading + currentRivalYawOffset;
   updateSkidMarks(dt);
   updateSmoke(dt);
 
