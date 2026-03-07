@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-7';
+const BUILD_VERSION = 'racing v2026.03.07-8';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -88,22 +88,43 @@ const TRACKS = {
     new THREE.Vector3(-280, 0, 260),
     new THREE.Vector3(-355, 0, 120),
   ],
-  stadium: (() => {
-    // single-loop donut-like circuit (polar function: no self-intersection)
-    const pts = [];
-    const cx = -20;
-    const cz = 20;
-    const n = 26;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      // smooth long/short sectors + one long straight feel
-      const r = 410 + 120 * Math.cos(a) - 75 * Math.cos(2 * a) + 30 * Math.sin(3 * a);
-      const x = cx + Math.cos(a) * r * 1.08;
-      const z = cz + Math.sin(a) * r * 0.86;
-      pts.push(new THREE.Vector3(x, 0, z));
-    }
-    return pts;
-  })(),
+  stadium: [
+    // longer, real-circuit-like layout (long straights + mixed corner complexes)
+    new THREE.Vector3(-760, 0, 90),
+    new THREE.Vector3(-560, 0, 86),
+    new THREE.Vector3(-330, 0, 80),
+    new THREE.Vector3(-80, 0, 72),
+    new THREE.Vector3(190, 0, 62),
+    new THREE.Vector3(430, 0, 48),
+    new THREE.Vector3(650, 0, 26),
+
+    // end of main straight -> tight right hairpin
+    new THREE.Vector3(760, 0, -80),
+    new THREE.Vector3(760, 0, -255),
+    new THREE.Vector3(650, 0, -395),
+
+    // flowing high-speed bends
+    new THREE.Vector3(470, 0, -470),
+    new THREE.Vector3(250, 0, -490),
+    new THREE.Vector3(70, 0, -450),
+    new THREE.Vector3(-90, 0, -515),
+    new THREE.Vector3(-290, 0, -485),
+
+    // back straight section
+    new THREE.Vector3(-500, 0, -420),
+    new THREE.Vector3(-670, 0, -315),
+    new THREE.Vector3(-780, 0, -170),
+
+    // final sector: chicane + long return curve
+    new THREE.Vector3(-800, 0, -10),
+    new THREE.Vector3(-730, 0, 130),
+    new THREE.Vector3(-610, 0, 230),
+    new THREE.Vector3(-430, 0, 270),
+    new THREE.Vector3(-250, 0, 255),
+    new THREE.Vector3(-110, 0, 205),
+    new THREE.Vector3(-220, 0, 145),
+    new THREE.Vector3(-430, 0, 110),
+  ],
 };
 
 let currentTrackKey = 'classic';
