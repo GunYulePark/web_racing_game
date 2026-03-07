@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-2';
+const BUILD_VERSION = 'racing v2026.03.07-3';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -89,23 +89,18 @@ const TRACKS = {
     new THREE.Vector3(-355, 0, 120),
   ],
   stadium: [
-    new THREE.Vector3(-335, 0, 90),
-    new THREE.Vector3(-345, 0, -20),
-    new THREE.Vector3(-275, 0, -145),
-    new THREE.Vector3(-95, 0, -210),
-    new THREE.Vector3(110, 0, -215),
-    new THREE.Vector3(285, 0, -165),
-    new THREE.Vector3(350, 0, -40),
-    new THREE.Vector3(330, 0, 95),
-    new THREE.Vector3(215, 0, 185),
-    new THREE.Vector3(40, 0, 205),
-    new THREE.Vector3(-110, 0, 158),
-    new THREE.Vector3(-40, 0, 58),
-    new THREE.Vector3(120, 0, 82),
-    new THREE.Vector3(190, 0, 210),
-    new THREE.Vector3(40, 0, 325),
-    new THREE.Vector3(-160, 0, 318),
-    new THREE.Vector3(-305, 0, 235),
+    new THREE.Vector3(-320, 0, 80),
+    new THREE.Vector3(-335, 0, -55),
+    new THREE.Vector3(-250, 0, -180),
+    new THREE.Vector3(-70, 0, -230),
+    new THREE.Vector3(130, 0, -225),
+    new THREE.Vector3(300, 0, -155),
+    new THREE.Vector3(355, 0, -20),
+    new THREE.Vector3(330, 0, 125),
+    new THREE.Vector3(205, 0, 235),
+    new THREE.Vector3(15, 0, 280),
+    new THREE.Vector3(-175, 0, 255),
+    new THREE.Vector3(-305, 0, 175),
   ],
 };
 
@@ -785,7 +780,7 @@ function tick(now) {
   if (!onRoad) aLong -= 45 * Math.sign(vForward || 0);
 
   vForward += aLong * dt;
-  const reverseMax = -68;
+  const reverseMax = -136;
   vForward = clamp(vForward, reverseMax, currentCarStats.topSpeed / 1.18);
   vLateral *= Math.exp(-grip * dt);
 
@@ -817,8 +812,8 @@ function tick(now) {
     const vel = new THREE.Vector2(state.vx, state.vz);
     const vn = vel.dot(normal);
     const vt = vel.clone().sub(normal.clone().multiplyScalar(vn));
-    const reflectedVn = vn > 0 ? -vn * 0.45 : vn * 0.25;
-    const bounced = vt.multiplyScalar(0.92).add(normal.clone().multiplyScalar(reflectedVn));
+    const reflectedVn = vn > 0 ? -vn * 0.2 : vn * 0.12;
+    const bounced = vt.multiplyScalar(0.95).add(normal.clone().multiplyScalar(reflectedVn));
 
     state.vx = bounced.x;
     state.vz = bounced.y;
