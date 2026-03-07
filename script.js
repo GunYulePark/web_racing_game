@@ -403,12 +403,32 @@ addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
 function bindHoldButton(el, key) {
   if (!el) return;
-  const down = (ev) => { ev.preventDefault(); keys.add(key); setupAudio(); };
-  const up = (ev) => { ev.preventDefault(); keys.delete(key); };
+  const down = (ev) => {
+    ev.preventDefault();
+    if (!raceStarted) return;
+    keys.add(key);
+    setupAudio();
+  };
+  const up = (ev) => {
+    ev.preventDefault();
+    keys.delete(key);
+  };
+
+  // Pointer events
   el.addEventListener('pointerdown', down);
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
   el.addEventListener('pointerleave', up);
+
+  // Touch fallback (iOS/Safari)
+  el.addEventListener('touchstart', down, { passive: false });
+  el.addEventListener('touchend', up, { passive: false });
+  el.addEventListener('touchcancel', up, { passive: false });
+
+  // Mouse fallback
+  el.addEventListener('mousedown', down);
+  el.addEventListener('mouseup', up);
+  el.addEventListener('mouseleave', up);
 }
 
 bindHoldButton(btnLeft, 'a');
