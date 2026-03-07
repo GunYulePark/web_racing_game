@@ -389,6 +389,8 @@ const state = {
   bestLap: null,
   lapPenaltyMs: 0,
   offroadAllWheels: false,
+  prevGateDist: 0,
+  startGateArmed: false,
 };
 
 const keys = new Set();
@@ -484,6 +486,12 @@ function resetCar() {
   state.lapStart = performance.now();
   state.lapPenaltyMs = 0;
   state.offroadAllWheels = false;
+  state.prevGateDist = 0;
+  state.startGateArmed = false;
+
+  const gateFwd = new THREE.Vector2(startDir.x, startDir.z).normalize();
+  const gateDelta = new THREE.Vector2(state.x - startP.x, state.z - startP.z);
+  state.prevGateDist = gateDelta.dot(gateFwd);
 
   // clear skid marks + smoke
   skidMarks.length = 0;
@@ -701,20 +709,38 @@ function tick(now) {
     spawnSmoke(sx, sz, smokeIntensity);
   }
 
-  // checkpoints/lap
+  // checkpoints (minimap guide)
   const cp = checkpoints[state.nextCp];
-  if (new THREE.Vector2(state.x, state.z).distanceTo(new THREE.Vector2(cp.x, cp.z)) < 24) {
-    state.nextCp++;
-    if (state.nextCp >= checkpoints.length) {
-      state.nextCp = 0;
-      const lapMs = now - state.lapStart + state.lapPenaltyMs;
-      state.bestLap = state.bestLap ? Math.min(state.bestLap, lapMs) : lapMs;
-      state.lapStart = now;
-      state.lapPenaltyMs = 0;
-      state.offroadAllWheels = false;
-      state.lap++;
-    }
+  if (new THREE.Vector2(state.x, state.z).distanceTo(new THREE.Vector2(cp.x, cp.z)) < 32) {
+    state.nextCp = (state.nextCp + 1) % checkpoints.length;
   }
+
+  // lap timing by start line crossing
+  const gateFwd = new THREE.Vector2(startDir.x, startDir.z).normalize();
+  const gateRight = new THREE.Vector2(gateFwd.y, -gateFwd.x);
+  const gateDelta = new THREE.Vector2(state.x - startP.x, state.z - startP.z);
+  const gateDist = gateDelta.dot(gateFwd);
+  const lateral = Math.abs(gateDelta.dot(gateRight));
+
+  if (Math.abs(gateDist) > 14) state.startGateArmed = true;
+
+  const crossedForward = state.startGateArmed
+    && state.prevGateDist < 0
+    && gateDist >= 0
+    && lateral < (roadW * 0.62)
+    && vForward > 12
+    && (now - state.lapStart) > 2500;
+
+  if (crossedForward) {
+    const lapMs = now - state.lapStart + state.lapPenaltyMs;
+    state.bestLap = state.bestLap ? Math.min(state.bestLap, lapMs) : lapMs;
+    state.lapStart = now;
+    state.lapPenaltyMs = 0;
+    state.offroadAllWheels = false;
+    state.lap++;
+  }
+
+  state.prevGateDist = gateDist;
 
   // place meshes
   carRoot.position.set(state.x, 0, state.z);
