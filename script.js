@@ -23,6 +23,10 @@ const startMenu = document.getElementById('startMenu');
 const startCarSelect = document.getElementById('startCarSelect');
 const trackSelect = document.getElementById('trackSelect');
 const startRaceBtn = document.getElementById('startRaceBtn');
+const btnLeft = document.getElementById('btnLeft');
+const btnRight = document.getElementById('btnRight');
+const btnBrake = document.getElementById('btnBrake');
+const btnAccel = document.getElementById('btnAccel');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -386,6 +390,21 @@ addEventListener('keydown', (e) => {
   setupAudio();
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+function bindHoldButton(el, key) {
+  if (!el) return;
+  const down = (ev) => { ev.preventDefault(); keys.add(key); setupAudio(); };
+  const up = (ev) => { ev.preventDefault(); keys.delete(key); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave', up);
+}
+
+bindHoldButton(btnLeft, 'a');
+bindHoldButton(btnRight, 'd');
+bindHoldButton(btnBrake, 's');
+bindHoldButton(btnAccel, 'w');
 
 
 

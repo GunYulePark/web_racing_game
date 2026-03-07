@@ -31,6 +31,32 @@ canvas { display: block; }
   cursor: pointer;
 }
 #hud { position: fixed; inset: 0; pointer-events: none; color: #eaf2ff; }
+.mobile-controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  display: none;
+  gap: 10px;
+  padding: 0 12px;
+  z-index: 25;
+  pointer-events: none;
+}
+.mobile-controls button {
+  pointer-events: auto;
+  border: 0;
+  border-radius: 10px;
+  min-width: 64px;
+  height: 48px;
+  background: rgba(16,24,36,.86);
+  color: #eef5ff;
+  font-weight: 700;
+}
+#btnAccel { margin-left: auto; background: rgba(47,138,83,.92); }
+#btnBrake { background: rgba(170,64,64,.92); }
+@media (max-width: 900px), (pointer: coarse) {
+  .mobile-controls { display: flex; }
+}
 .panel { position: absolute; background: rgba(8,12,18,.58); border: 1px solid rgba(255,255,255,.2); padding: 10px 12px; border-radius: 10px; min-width: 190px; backdrop-filter: blur(2px); }
 .left { left: 14px; }
 .right { right: 14px; }
