@@ -348,10 +348,6 @@ startRaceBtn?.addEventListener('click', () => {
   setupAudio();
 });
 
-syncCarSelectors(currentCarKey);
-loadCarModel(currentCarKey);
-setTrack('classic');
-
 // skid marks
 const skidGroup = new THREE.Group();
 scene.add(skidGroup);
@@ -468,6 +464,10 @@ function resetCar() {
   smokeParticles.length = 0;
   while (smokeGroup.children.length) smokeGroup.remove(smokeGroup.children[0]);
 }
+
+syncCarSelectors(currentCarKey);
+loadCarModel(currentCarKey);
+setTrack('classic');
 
 function spawnSkidMark(x, z, heading, alpha = 0.25) {
   const m = new THREE.Mesh(
