@@ -211,6 +211,7 @@ const CAR_MODELS = {
     type: 'gltf',
     url: 'https://threejs.org/examples/models/gltf/ferrari.glb',
     stats: { topSpeed: 220, accel: 150, brake: 165, handling: 1.05 },
+    rotFix: { x: 0, y: 0, z: 0 },
   },
   lowpoly1: {
     label: 'Low Poly Car 1',
@@ -218,6 +219,7 @@ const CAR_MODELS = {
     url: './assets/cars/lowpoly/car_1.fbx',
     texture: './assets/cars/lowpoly/car_texture_1.png',
     stats: { topSpeed: 192, accel: 128, brake: 148, handling: 1.15 },
+    rotFix: { x: 0, y: 0, z: Math.PI / 2 },
   },
   lowpoly2: {
     label: 'Low Poly Car 2',
@@ -225,6 +227,7 @@ const CAR_MODELS = {
     url: './assets/cars/lowpoly/car_2.fbx',
     texture: './assets/cars/lowpoly/car_texture_2.png',
     stats: { topSpeed: 205, accel: 136, brake: 155, handling: 0.98 },
+    rotFix: { x: 0, y: 0, z: Math.PI / 2 },
   },
 };
 
@@ -238,7 +241,7 @@ function updateCarStatsUI() {
   carStats.textContent = `${cfg.label}\nTOP ${s.topSpeed} km/h · ACC ${s.accel}\nBRK ${s.brake} · HDL ${(s.handling * 100).toFixed(0)}%`;
 }
 
-function prepareModel(model, extraRotationY = 0) {
+function prepareModel(model, extraRotationY = 0, rotFix = null) {
   model.traverse((obj) => {
     if (obj.isMesh) {
       obj.castShadow = false;
@@ -253,6 +256,11 @@ function prepareModel(model, extraRotationY = 0) {
   const scale = targetLength / Math.max(size.x, size.z, 0.001);
   model.scale.setScalar(scale);
   model.rotation.y += extraRotationY;
+  if (rotFix) {
+    model.rotation.x += rotFix.x || 0;
+    model.rotation.y += rotFix.y || 0;
+    model.rotation.z += rotFix.z || 0;
+  }
 
   const box2 = new THREE.Box3().setFromObject(model);
   model.position.y += -box2.min.y + 0.15;
@@ -274,7 +282,7 @@ function loadCarModel(key = 'ferrari') {
       cfg.url,
       (gltf) => {
         carRoot.clear();
-        const model = prepareModel(gltf.scene, Math.PI);
+        const model = prepareModel(gltf.scene, Math.PI, cfg.rotFix);
         carRoot.add(model);
         setFallbackVisible(false);
       },
@@ -313,7 +321,7 @@ function loadCarModel(key = 'ferrari') {
         });
 
         carRoot.clear();
-        const normalized = prepareModel(model, Math.PI);
+        const normalized = prepareModel(model, Math.PI, cfg.rotFix);
         carRoot.add(normalized);
         setFallbackVisible(false);
       },
