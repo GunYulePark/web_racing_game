@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-3';
+const BUILD_VERSION = 'racing v2026.03.07-4';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -89,18 +89,39 @@ const TRACKS = {
     new THREE.Vector3(-355, 0, 120),
   ],
   stadium: [
-    new THREE.Vector3(-320, 0, 80),
-    new THREE.Vector3(-335, 0, -55),
-    new THREE.Vector3(-250, 0, -180),
-    new THREE.Vector3(-70, 0, -230),
-    new THREE.Vector3(130, 0, -225),
-    new THREE.Vector3(300, 0, -155),
-    new THREE.Vector3(355, 0, -20),
-    new THREE.Vector3(330, 0, 125),
-    new THREE.Vector3(205, 0, 235),
-    new THREE.Vector3(15, 0, 280),
-    new THREE.Vector3(-175, 0, 255),
-    new THREE.Vector3(-305, 0, 175),
+    // start/finish straight (long)
+    new THREE.Vector3(-520, 0, 72),
+    new THREE.Vector3(-360, 0, 62),
+    new THREE.Vector3(-190, 0, 56),
+    new THREE.Vector3(5, 0, 50),
+    new THREE.Vector3(220, 0, 44),
+    new THREE.Vector3(430, 0, 36),
+
+    // heavy brake into right hairpin
+    new THREE.Vector3(520, 0, -20),
+    new THREE.Vector3(520, 0, -170),
+    new THREE.Vector3(430, 0, -280),
+
+    // technical middle sector with bends/chicanes
+    new THREE.Vector3(270, 0, -320),
+    new THREE.Vector3(110, 0, -260),
+    new THREE.Vector3(-30, 0, -330),
+    new THREE.Vector3(-180, 0, -270),
+    new THREE.Vector3(-260, 0, -140),
+
+    // back straight and left complex
+    new THREE.Vector3(-330, 0, -20),
+    new THREE.Vector3(-430, 0, -90),
+    new THREE.Vector3(-560, 0, -10),
+    new THREE.Vector3(-560, 0, 150),
+    new THREE.Vector3(-460, 0, 260),
+
+    // final curved section back to straight
+    new THREE.Vector3(-300, 0, 310),
+    new THREE.Vector3(-130, 0, 250),
+    new THREE.Vector3(-10, 0, 160),
+    new THREE.Vector3(-170, 0, 110),
+    new THREE.Vector3(-360, 0, 86),
   ],
 };
 
