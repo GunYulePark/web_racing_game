@@ -212,6 +212,7 @@ const CAR_MODELS = {
     url: 'https://threejs.org/examples/models/gltf/ferrari.glb',
     stats: { topSpeed: 220, accel: 150, brake: 165, handling: 1.05 },
     rotFix: { x: 0, y: 0, z: 0 },
+    yawOffset: 0,
   },
   lowpoly1: {
     label: 'Low Poly Car 1',
@@ -219,7 +220,8 @@ const CAR_MODELS = {
     url: './assets/cars/lowpoly/car_1.fbx',
     texture: './assets/cars/lowpoly/car_texture_1.png',
     stats: { topSpeed: 192, accel: 128, brake: 148, handling: 1.15 },
-    rotFix: { x: -Math.PI / 2, y: Math.PI / 2, z: 0 },
+    rotFix: { x: -Math.PI / 2, y: 0, z: 0 },
+    yawOffset: Math.PI / 2,
   },
   lowpoly2: {
     label: 'Low Poly Car 2',
@@ -227,12 +229,14 @@ const CAR_MODELS = {
     url: './assets/cars/lowpoly/car_2.fbx',
     texture: './assets/cars/lowpoly/car_texture_2.png',
     stats: { topSpeed: 205, accel: 136, brake: 155, handling: 0.98 },
-    rotFix: { x: -Math.PI / 2, y: Math.PI / 2, z: 0 },
+    rotFix: { x: -Math.PI / 2, y: 0, z: 0 },
+    yawOffset: Math.PI / 2,
   },
 };
 
 let currentCarKey = carSelect?.value || 'ferrari';
 let currentCarStats = CAR_MODELS[currentCarKey]?.stats || CAR_MODELS.ferrari.stats;
+let currentCarYawOffset = CAR_MODELS[currentCarKey]?.yawOffset || 0;
 
 function updateCarStatsUI() {
   const cfg = CAR_MODELS[currentCarKey] || CAR_MODELS.ferrari;
@@ -275,6 +279,7 @@ function loadCarModel(key = 'ferrari') {
   currentCarKey = CAR_MODELS[key] ? key : 'ferrari';
   const cfg = CAR_MODELS[currentCarKey] || CAR_MODELS.ferrari;
   currentCarStats = cfg.stats;
+  currentCarYawOffset = cfg.yawOffset || 0;
   updateCarStatsUI();
 
   if (cfg.type === 'gltf') {
@@ -764,7 +769,7 @@ function tick(now) {
 
   // place meshes
   carRoot.position.set(state.x, 0, state.z);
-  carRoot.rotation.y = state.heading;
+  carRoot.rotation.y = state.heading + currentCarYawOffset;
   updateSkidMarks(dt);
   updateSmoke(dt);
 
