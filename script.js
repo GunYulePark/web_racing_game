@@ -221,6 +221,13 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
+// avoid long-press text selection/copy popup on mobile controls
+['contextmenu', 'selectstart'].forEach((evt) => {
+  steerPad.addEventListener(evt, (e) => e.preventDefault());
+  btnThrottle.addEventListener(evt, (e) => e.preventDefault());
+  btnBrake.addEventListener(evt, (e) => e.preventDefault());
+});
+
 function setBtnHold(btn, key) {
   const down = () => { mobileInput[key] = 1; setupAudio(); };
   const up = () => { mobileInput[key] = 0; };
@@ -245,16 +252,12 @@ function updateSteerFromPointer(clientX, clientY) {
   const ny = (dy / len) * clamped;
   steerThumb.style.transform = `translate(${nx}px, ${ny}px)`;
 
-  // easier steering: deadzone + softened curve + reduced max steer
+  // match PC-style steering: discrete left/neutral/right
   const raw = clamp(nx / maxR, -1, 1);
-  const dz = 0.18;
-  if (Math.abs(raw) < dz) {
-    mobileInput.steer = 0;
-  } else {
-    const norm = (Math.abs(raw) - dz) / (1 - dz);
-    const curved = Math.pow(norm, 1.45);
-    mobileInput.steer = Math.sign(raw) * curved * 0.72;
-  }
+  const threshold = 0.22;
+  if (raw > threshold) mobileInput.steer = 1;
+  else if (raw < -threshold) mobileInput.steer = -1;
+  else mobileInput.steer = 0;
 }
 
 steerPad.addEventListener('pointerdown', (e) => {
@@ -482,7 +485,6 @@ function tick(now) {
   // keyboard + touch steer (left positive in this coordinate setup)
   const keySteer = (keys.has('arrowleft') || keys.has('a') ? 1 : 0) + (keys.has('arrowright') || keys.has('d') ? -1 : 0);
   const steerIn = clamp(keySteer + mobileInput.steer, -1, 1);
-  const mobileSteering = Math.abs(mobileInput.steer) > 0.001;
 
   const fwd = new THREE.Vector2(Math.sin(state.heading), Math.cos(state.heading));
   const right = new THREE.Vector2(fwd.y, -fwd.x);
@@ -494,10 +496,9 @@ function tick(now) {
   const onRoad = distSq < (roadW * 0.9) ** 2;
   const grip = onRoad ? 2.4 : 1.0;
 
-  const baseSteer = 0.62 * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
-  const steerLimit = mobileSteering ? baseSteer * 0.8 : baseSteer;
+  const steerLimit = 0.62 * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
   const steerTarget = steerIn * steerLimit;
-  state.steer += (steerTarget - state.steer) * Math.min(1, dt * (mobileSteering ? 6.0 : 7.5));
+  state.steer += (steerTarget - state.steer) * Math.min(1, dt * 7.5);
 
   let aLong = 0;
   if (throttle) aLong += 140;

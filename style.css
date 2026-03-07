@@ -1,4 +1,4 @@
-html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #080b10; font-family: Inter, Arial, sans-serif; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #080b10; font-family: Inter, Arial, sans-serif; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 canvas { display: block; }
 #hud { position: fixed; inset: 0; pointer-events: none; color: #eaf2ff; }
 .panel { position: absolute; background: rgba(8,12,18,.58); border: 1px solid rgba(255,255,255,.2); padding: 10px 12px; border-radius: 10px; min-width: 190px; backdrop-filter: blur(2px); }
@@ -31,7 +31,7 @@ canvas { display: block; }
 .thumb { width: 44px; height: 44px; border-radius: 999px; background: rgba(130,180,255,.8); position: absolute; left: 38px; top: 38px; }
 .pad .label { position: absolute; bottom: -18px; width: 100%; text-align: center; color: #d8e6ff; font-size: 11px; }
 .buttons { display: flex; gap: 8px; pointer-events: auto; }
-.ctrl-btn { min-width: 88px; height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.25); color: white; font-weight: 700; background: rgba(20,28,40,.55); touch-action: none; }
+.ctrl-btn { min-width: 88px; height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.25); color: white; font-weight: 700; background: rgba(20,28,40,.55); touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 .ctrl-btn.accel { background: rgba(51,165,97,.72); }
 .ctrl-btn.brake { background: rgba(183,66,66,.72); }
 
