@@ -244,7 +244,17 @@ function updateSteerFromPointer(clientX, clientY) {
   const nx = (dx / len) * clamped;
   const ny = (dy / len) * clamped;
   steerThumb.style.transform = `translate(${nx}px, ${ny}px)`;
-  mobileInput.steer = clamp(nx / maxR, -1, 1);
+
+  // easier steering: deadzone + softened curve + reduced max steer
+  const raw = clamp(nx / maxR, -1, 1);
+  const dz = 0.18;
+  if (Math.abs(raw) < dz) {
+    mobileInput.steer = 0;
+  } else {
+    const norm = (Math.abs(raw) - dz) / (1 - dz);
+    const curved = Math.pow(norm, 1.45);
+    mobileInput.steer = Math.sign(raw) * curved * 0.72;
+  }
 }
 
 steerPad.addEventListener('pointerdown', (e) => {
@@ -472,6 +482,7 @@ function tick(now) {
   // keyboard + touch steer (left positive in this coordinate setup)
   const keySteer = (keys.has('arrowleft') || keys.has('a') ? 1 : 0) + (keys.has('arrowright') || keys.has('d') ? -1 : 0);
   const steerIn = clamp(keySteer + mobileInput.steer, -1, 1);
+  const mobileSteering = Math.abs(mobileInput.steer) > 0.001;
 
   const fwd = new THREE.Vector2(Math.sin(state.heading), Math.cos(state.heading));
   const right = new THREE.Vector2(fwd.y, -fwd.x);
@@ -483,9 +494,10 @@ function tick(now) {
   const onRoad = distSq < (roadW * 0.9) ** 2;
   const grip = onRoad ? 2.4 : 1.0;
 
-  const steerLimit = 0.62 * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
+  const baseSteer = 0.62 * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
+  const steerLimit = mobileSteering ? baseSteer * 0.8 : baseSteer;
   const steerTarget = steerIn * steerLimit;
-  state.steer += (steerTarget - state.steer) * Math.min(1, dt * 7.5);
+  state.steer += (steerTarget - state.steer) * Math.min(1, dt * (mobileSteering ? 6.0 : 7.5));
 
   let aLong = 0;
   if (throttle) aLong += 140;
