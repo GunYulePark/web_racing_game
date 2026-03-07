@@ -16,6 +16,11 @@ const gArc = document.getElementById('gArc');
 const gNeedle = document.getElementById('gNeedle');
 const gSpeedText = document.getElementById('gSpeedText');
 
+const steerPad = document.getElementById('steerPad');
+const steerThumb = document.getElementById('steerThumb');
+const btnThrottle = document.getElementById('btnThrottle');
+const btnBrake = document.getElementById('btnBrake');
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -206,12 +211,60 @@ const state = {
 };
 
 const keys = new Set();
+const mobileInput = { steer: 0, throttle: 0, brake: 0 };
+let steerPadActiveId = null;
+
 addEventListener('keydown', (e) => {
   keys.add(e.key.toLowerCase());
   if (e.key.toLowerCase() === 'r') resetCar();
   setupAudio();
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+
+function setBtnHold(btn, key) {
+  const down = () => { mobileInput[key] = 1; setupAudio(); };
+  const up = () => { mobileInput[key] = 0; };
+  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); down(); });
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointercancel', up);
+  btn.addEventListener('pointerleave', up);
+}
+setBtnHold(btnThrottle, 'throttle');
+setBtnHold(btnBrake, 'brake');
+
+function updateSteerFromPointer(clientX, clientY) {
+  const rect = steerPad.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = clientX - cx;
+  const dy = clientY - cy;
+  const maxR = rect.width * 0.34;
+  const len = Math.hypot(dx, dy) || 0.0001;
+  const clamped = Math.min(maxR, len);
+  const nx = (dx / len) * clamped;
+  const ny = (dy / len) * clamped;
+  steerThumb.style.transform = `translate(${nx}px, ${ny}px)`;
+  mobileInput.steer = clamp(nx / maxR, -1, 1);
+}
+
+steerPad.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  steerPadActiveId = e.pointerId;
+  steerPad.setPointerCapture(e.pointerId);
+  setupAudio();
+  updateSteerFromPointer(e.clientX, e.clientY);
+});
+steerPad.addEventListener('pointermove', (e) => {
+  if (e.pointerId !== steerPadActiveId) return;
+  updateSteerFromPointer(e.clientX, e.clientY);
+});
+function resetSteerPad() {
+  steerPadActiveId = null;
+  mobileInput.steer = 0;
+  steerThumb.style.transform = 'translate(0px, 0px)';
+}
+steerPad.addEventListener('pointerup', resetSteerPad);
+steerPad.addEventListener('pointercancel', resetSteerPad);
 
 const checkpoints = Array.from({ length: 8 }, (_, i) => curve.getPointAt(i / 8));
 
@@ -408,14 +461,17 @@ function tick(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
 
-  const throttle = (keys.has('arrowup') || keys.has('w')) ? 1 : 0;
-  const brakeTarget = (keys.has('arrowdown') || keys.has('s') || keys.has(' ')) ? 1 : 0;
+  const keyThrottle = (keys.has('arrowup') || keys.has('w')) ? 1 : 0;
+  const keyBrake = (keys.has('arrowdown') || keys.has('s') || keys.has(' ')) ? 1 : 0;
+  const throttle = Math.max(keyThrottle, mobileInput.throttle);
+  const brakeTarget = Math.max(keyBrake, mobileInput.brake);
   // gradual brake pedal response
   state.brakePedal += (brakeTarget - state.brakePedal) * Math.min(1, dt * (brakeTarget ? 4.5 : 3.2));
   const brake = state.brakePedal;
 
-  // invert fixed: left key should steer left on screen
-  const steerIn = (keys.has('arrowleft') || keys.has('a') ? 1 : 0) + (keys.has('arrowright') || keys.has('d') ? -1 : 0);
+  // keyboard + touch steer (left positive in this coordinate setup)
+  const keySteer = (keys.has('arrowleft') || keys.has('a') ? 1 : 0) + (keys.has('arrowright') || keys.has('d') ? -1 : 0);
+  const steerIn = clamp(keySteer + mobileInput.steer, -1, 1);
 
   const fwd = new THREE.Vector2(Math.sin(state.heading), Math.cos(state.heading));
   const right = new THREE.Vector2(fwd.y, -fwd.x);

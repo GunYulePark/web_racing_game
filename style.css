@@ -25,3 +25,21 @@ canvas { display: block; }
 .g-center { fill: #f2f2f2; }
 .g-speed { fill: #f4f8ff; font-size: 30px; font-weight: 800; }
 .g-unit { fill: #d0d9ea; font-size: 12px; }
+
+.mobile-controls { position: fixed; left: 0; right: 0; bottom: 8px; display: none; justify-content: space-between; align-items: end; padding: 0 10px; pointer-events: none; }
+.pad { width: 120px; height: 120px; border-radius: 999px; background: rgba(20,26,36,.45); border: 1px solid rgba(255,255,255,.2); position: relative; pointer-events: auto; touch-action: none; }
+.thumb { width: 44px; height: 44px; border-radius: 999px; background: rgba(130,180,255,.8); position: absolute; left: 38px; top: 38px; }
+.pad .label { position: absolute; bottom: -18px; width: 100%; text-align: center; color: #d8e6ff; font-size: 11px; }
+.buttons { display: flex; gap: 8px; pointer-events: auto; }
+.ctrl-btn { min-width: 88px; height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.25); color: white; font-weight: 700; background: rgba(20,28,40,.55); touch-action: none; }
+.ctrl-btn.accel { background: rgba(51,165,97,.72); }
+.ctrl-btn.brake { background: rgba(183,66,66,.72); }
+
+@media (max-width: 900px), (pointer: coarse) {
+  .mobile-controls { display: flex; }
+  .panel.top { transform: scale(.9); transform-origin: top; }
+  .panel.bottom.minimap-wrap { width: 130px; }
+  #minimap { width: 130px; height: 130px; }
+  .gauge-wrap { width: 170px; height: 170px; }
+  #speedGauge { width: 170px; height: 170px; }
+}
