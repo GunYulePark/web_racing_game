@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-4';
+const BUILD_VERSION = 'racing v2026.03.07-5';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -89,39 +89,35 @@ const TRACKS = {
     new THREE.Vector3(-355, 0, 120),
   ],
   stadium: [
-    // start/finish straight (long)
-    new THREE.Vector3(-520, 0, 72),
-    new THREE.Vector3(-360, 0, 62),
-    new THREE.Vector3(-190, 0, 56),
-    new THREE.Vector3(5, 0, 50),
-    new THREE.Vector3(220, 0, 44),
-    new THREE.Vector3(430, 0, 36),
+    // long straight + smooth non-crossing loop
+    new THREE.Vector3(-560, 0, 70),
+    new THREE.Vector3(-370, 0, 62),
+    new THREE.Vector3(-170, 0, 56),
+    new THREE.Vector3(60, 0, 48),
+    new THREE.Vector3(280, 0, 38),
+    new THREE.Vector3(470, 0, 22),
 
-    // heavy brake into right hairpin
-    new THREE.Vector3(520, 0, -20),
-    new THREE.Vector3(520, 0, -170),
-    new THREE.Vector3(430, 0, -280),
+    // T1/T2 complex (right then long left)
+    new THREE.Vector3(560, 0, -70),
+    new THREE.Vector3(520, 0, -220),
+    new THREE.Vector3(380, 0, -330),
 
-    // technical middle sector with bends/chicanes
-    new THREE.Vector3(270, 0, -320),
-    new THREE.Vector3(110, 0, -260),
-    new THREE.Vector3(-30, 0, -330),
-    new THREE.Vector3(-180, 0, -270),
-    new THREE.Vector3(-260, 0, -140),
+    // middle technical bends
+    new THREE.Vector3(200, 0, -355),
+    new THREE.Vector3(40, 0, -300),
+    new THREE.Vector3(-120, 0, -340),
+    new THREE.Vector3(-300, 0, -285),
 
-    // back straight and left complex
-    new THREE.Vector3(-330, 0, -20),
-    new THREE.Vector3(-430, 0, -90),
-    new THREE.Vector3(-560, 0, -10),
-    new THREE.Vector3(-560, 0, 150),
-    new THREE.Vector3(-460, 0, 260),
-
-    // final curved section back to straight
-    new THREE.Vector3(-300, 0, 310),
-    new THREE.Vector3(-130, 0, 250),
-    new THREE.Vector3(-10, 0, 160),
-    new THREE.Vector3(-170, 0, 110),
-    new THREE.Vector3(-360, 0, 86),
+    // back side to final sector
+    new THREE.Vector3(-470, 0, -190),
+    new THREE.Vector3(-560, 0, -40),
+    new THREE.Vector3(-575, 0, 130),
+    new THREE.Vector3(-500, 0, 250),
+    new THREE.Vector3(-360, 0, 320),
+    new THREE.Vector3(-190, 0, 300),
+    new THREE.Vector3(-60, 0, 235),
+    new THREE.Vector3(-210, 0, 150),
+    new THREE.Vector3(-390, 0, 96),
   ],
 };
 
@@ -141,12 +137,8 @@ const edgeMat = new THREE.MeshStandardMaterial({ color: '#c2c9d3', roughness: 0.
 const curbW = 48;
 const roadW = 40;
 const segCount = 900;
-const shoulderWidth = 24; // about 3 car widths of safety shoulder
+const shoulderWidth = 24; // reserved shoulder width
 const guardWallLimit = roadW * 0.5 + shoulderWidth;
-
-const wallBlocks = new THREE.Group();
-scene.add(wallBlocks);
-const wallMat = new THREE.MeshStandardMaterial({ color: '#e7edf8', roughness: 0.7, metalness: 0.08 });
 
 function buildRibbon(width, y, mat) {
   const positions = [];
@@ -182,47 +174,6 @@ function buildRibbon(width, y, mat) {
   return m;
 }
 
-function buildGuardWalls() {
-  while (wallBlocks.children.length) wallBlocks.remove(wallBlocks.children[0]);
-
-  const steps = 280;
-  const sideOffset = guardWallLimit + 1.6;
-  const wallHeight = 3.2;
-  const wallThickness = 3.8;
-
-  function sidePoint(t, sign = 1) {
-    const p = curve.getPointAt(t);
-    const p2 = curve.getPointAt((t + 1 / steps) % 1);
-    const dir = new THREE.Vector3().subVectors(p2, p).normalize();
-    const right = new THREE.Vector3(-dir.z, 0, dir.x);
-    return p.clone().addScaledVector(right, sign * sideOffset);
-  }
-
-  function buildSide(sign = 1) {
-    for (let i = 0; i < steps; i++) {
-      const t1 = i / steps;
-      const t2 = (i + 1) / steps;
-      const a = sidePoint(t1, sign);
-      const b = sidePoint(t2 % 1, sign);
-
-      const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
-      const seg = new THREE.Vector3().subVectors(b, a);
-      const len = Math.max(0.01, seg.length());
-      const angle = Math.atan2(seg.x, seg.z);
-
-      const wallSeg = new THREE.Mesh(
-        new THREE.BoxGeometry(wallThickness, wallHeight, len + 0.6),
-        wallMat
-      );
-      wallSeg.position.set(mid.x, wallHeight * 0.5 + 0.2, mid.z);
-      wallSeg.rotation.y = angle;
-      wallBlocks.add(wallSeg);
-    }
-  }
-
-  buildSide(-1);
-  buildSide(1);
-}
 
 function setTrack(trackKey = 'classic') {
   currentTrackKey = TRACKS[trackKey] ? trackKey : 'classic';
@@ -241,7 +192,6 @@ function setTrack(trackKey = 'classic') {
 
   curbMesh = buildRibbon(curbW, 0.22, edgeMat);
   roadMesh = buildRibbon(roadW, 0.5, roadMat);
-  buildGuardWalls();
 
   startP = curve.getPointAt(0);
   const startP2 = curve.getPointAt(1 / segCount);
@@ -818,30 +768,7 @@ function tick(now) {
   state.x += state.vx * dt;
   state.z += state.vz * dt;
 
-  const wallSample = nearestTrackSample(state.x, state.z);
-  if (wallSample.distSq > guardWallLimit ** 2) {
-    // bounce from guard wall instead of sticking
-    const toCar = new THREE.Vector2(state.x - wallSample.point.x, state.z - wallSample.point.z);
-    const sideSign = toCar.dot(wallSample.right) >= 0 ? 1 : -1;
-    const normal = wallSample.right.clone().multiplyScalar(sideSign).normalize();
 
-    // snap just inside guard line
-    const snap = guardWallLimit * 0.985;
-    state.x = wallSample.point.x + normal.x * snap;
-    state.z = wallSample.point.z + normal.y * snap;
-
-    const vel = new THREE.Vector2(state.vx, state.vz);
-    const vn = vel.dot(normal);
-    const vt = vel.clone().sub(normal.clone().multiplyScalar(vn));
-    const reflectedVn = vn > 0 ? -vn * 0.2 : vn * 0.12;
-    const bounced = vt.multiplyScalar(0.95).add(normal.clone().multiplyScalar(reflectedVn));
-
-    state.vx = bounced.x;
-    state.vz = bounced.y;
-    vForward = state.vx * fwd.x + state.vz * fwd.y;
-    vLateral = state.vx * right.x + state.vz * right.y;
-    state.yawRate *= 0.68;
-  }
 
   // skid mark trigger (hard brake / lateral slip)
   state.skidCd = Math.max(0, state.skidCd - dt);
