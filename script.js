@@ -9,6 +9,7 @@ const lapText = document.getElementById('lapText');
 const bestText = document.getElementById('bestText');
 const nowText = document.getElementById('nowText');
 const penaltyText = document.getElementById('penaltyText');
+const buildText = document.getElementById('buildText');
 const throttleBar = document.getElementById('throttleBar');
 const brakeBar = document.getElementById('brakeBar');
 const rpmBar = document.getElementById('rpmBar');
@@ -27,6 +28,9 @@ const btnLeft = document.getElementById('btnLeft');
 const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
+
+const BUILD_VERSION = 'racing v2026.03.07-2';
+if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -165,28 +169,43 @@ function buildRibbon(width, y, mat) {
 function buildGuardWalls() {
   while (wallBlocks.children.length) wallBlocks.remove(wallBlocks.children[0]);
 
-  const blockGeo = new THREE.BoxGeometry(3.8, 3.2, 3.8);
-  const steps = 260;
+  const steps = 280;
   const sideOffset = guardWallLimit + 1.6;
+  const wallHeight = 3.2;
+  const wallThickness = 3.8;
 
-  for (let i = 0; i < steps; i++) {
-    const t = i / steps;
+  function sidePoint(t, sign = 1) {
     const p = curve.getPointAt(t);
     const p2 = curve.getPointAt((t + 1 / steps) % 1);
     const dir = new THREE.Vector3().subVectors(p2, p).normalize();
     const right = new THREE.Vector3(-dir.z, 0, dir.x);
-
-    const leftPos = p.clone().addScaledVector(right, -sideOffset);
-    const rightPos = p.clone().addScaledVector(right, sideOffset);
-
-    const lBlock = new THREE.Mesh(blockGeo, wallMat);
-    lBlock.position.set(leftPos.x, 2.0, leftPos.z);
-    wallBlocks.add(lBlock);
-
-    const rBlock = new THREE.Mesh(blockGeo, wallMat);
-    rBlock.position.set(rightPos.x, 2.0, rightPos.z);
-    wallBlocks.add(rBlock);
+    return p.clone().addScaledVector(right, sign * sideOffset);
   }
+
+  function buildSide(sign = 1) {
+    for (let i = 0; i < steps; i++) {
+      const t1 = i / steps;
+      const t2 = (i + 1) / steps;
+      const a = sidePoint(t1, sign);
+      const b = sidePoint(t2 % 1, sign);
+
+      const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+      const seg = new THREE.Vector3().subVectors(b, a);
+      const len = Math.max(0.01, seg.length());
+      const angle = Math.atan2(seg.x, seg.z);
+
+      const wallSeg = new THREE.Mesh(
+        new THREE.BoxGeometry(wallThickness, wallHeight, len + 0.6),
+        wallMat
+      );
+      wallSeg.position.set(mid.x, wallHeight * 0.5 + 0.2, mid.z);
+      wallSeg.rotation.y = angle;
+      wallBlocks.add(wallSeg);
+    }
+  }
+
+  buildSide(-1);
+  buildSide(1);
 }
 
 function setTrack(trackKey = 'classic') {
