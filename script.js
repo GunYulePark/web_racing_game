@@ -61,22 +61,43 @@ scene.add(ground);
 // Track path
 // Reference-like winding course (top-right hairpin + lower loop)
 const pts = [
-  new THREE.Vector3(-320, 0, -40),
-  new THREE.Vector3(-250, 0, -190),
-  new THREE.Vector3(-40, 0, -250),
-  new THREE.Vector3(180, 0, -200),
-  new THREE.Vector3(315, 0, -70),
-  new THREE.Vector3(320, 0, 70),
-  new THREE.Vector3(210, 0, 145),
-  new THREE.Vector3(45, 0, 155),
-  new THREE.Vector3(-60, 0, 105),
-  new THREE.Vector3(10, 0, 20),
-  new THREE.Vector3(180, 0, 40),
-  new THREE.Vector3(260, 0, 190),
-  new THREE.Vector3(120, 0, 300),
-  new THREE.Vector3(-90, 0, 315),
-  new THREE.Vector3(-280, 0, 260),
-  new THREE.Vector3(-355, 0, 120),
+  // bottom straight (start/finish)
+  new THREE.Vector3(-350, 0, 330),
+  new THREE.Vector3(-220, 0, 330),
+  new THREE.Vector3(-60, 0, 330),
+  new THREE.Vector3(120, 0, 330),
+  new THREE.Vector3(280, 0, 330),
+  new THREE.Vector3(360, 0, 280),
+
+  // right side up + inner snake
+  new THREE.Vector3(360, 0, 170),
+  new THREE.Vector3(300, 0, 90),
+  new THREE.Vector3(180, 0, 110),
+  new THREE.Vector3(85, 0, 150),
+  new THREE.Vector3(150, 0, 200),
+  new THREE.Vector3(260, 0, 220),
+  new THREE.Vector3(330, 0, 150),
+
+  // top-right arc
+  new THREE.Vector3(340, 0, 20),
+  new THREE.Vector3(260, 0, -80),
+  new THREE.Vector3(120, 0, -110),
+
+  // mid S-turn bridge
+  new THREE.Vector3(20, 0, -60),
+  new THREE.Vector3(-30, 0, 20),
+  new THREE.Vector3(-70, 0, 70),
+  new THREE.Vector3(-120, 0, 40),
+  new THREE.Vector3(-110, 0, -20),
+
+  // left hairpin block
+  new THREE.Vector3(-180, 0, -95),
+  new THREE.Vector3(-300, 0, -90),
+  new THREE.Vector3(-360, 0, -10),
+  new THREE.Vector3(-320, 0, 90),
+  new THREE.Vector3(-250, 0, 150),
+  new THREE.Vector3(-250, 0, 230),
+  new THREE.Vector3(-300, 0, 290),
 ];
 const curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.2);
 
@@ -193,8 +214,8 @@ const smokeGroup = new THREE.Group();
 scene.add(smokeGroup);
 const smokeParticles = [];
 const state = {
-  x: -320, z: -40,
-  heading: Math.PI * 0.12,
+  x: -320, z: 330,
+  heading: Math.PI * 0.5,
   steer: 0,
   vx: 0,
   vz: 0,
@@ -302,8 +323,8 @@ function drawMiniMap() {
 
 
 function resetCar() {
-  state.x = -320; state.z = -40;
-  state.heading = Math.PI * 0.12;
+  state.x = -320; state.z = 330;
+  state.heading = Math.PI * 0.5;
   state.vx = 0; state.vz = 0; state.yawRate = 0; state.steer = 0;
   state.skidCd = 0;
   state.brakePedal = 0;
