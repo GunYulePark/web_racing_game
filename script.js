@@ -121,8 +121,8 @@ const edgeMat = new THREE.MeshStandardMaterial({ color: '#c2c9d3', roughness: 0.
 const curbW = 48;
 const roadW = 40;
 const segCount = 900;
-const guardMargin = 3.2;
-const guardWallLimit = roadW * 0.5 + guardMargin;
+const shoulderWidth = 24; // about 3 car widths of safety shoulder
+const guardWallLimit = roadW * 0.5 + shoulderWidth;
 
 const wallBlocks = new THREE.Group();
 scene.add(wallBlocks);
@@ -640,14 +640,32 @@ function updateSmoke(dt) {
   }
 }
 
-function roadDistanceSq(x, z) {
+function nearestTrackSample(x, z, samples = 180) {
   let min = Infinity;
-  for (let i = 0; i < 90; i++) {
-    const p = curve.getPointAt(i / 90);
-    const d = (p.x - x) ** 2 + (p.z - z) ** 2;
-    if (d < min) min = d;
+  let bestP = null;
+  let bestRight = null;
+
+  for (let i = 0; i < samples; i++) {
+    const t = i / samples;
+    const p = curve.getPointAt(t);
+    const p2 = curve.getPointAt((t + 1 / samples) % 1);
+    const dir = new THREE.Vector3().subVectors(p2, p).normalize();
+    const right = new THREE.Vector2(-dir.z, dir.x).normalize();
+    const dx = x - p.x;
+    const dz = z - p.z;
+    const d = dx * dx + dz * dz;
+    if (d < min) {
+      min = d;
+      bestP = p;
+      bestRight = right;
+    }
   }
-  return min;
+
+  return { distSq: min, point: bestP, right: bestRight };
+}
+
+function roadDistanceSq(x, z) {
+  return nearestTrackSample(x, z).distSq;
 }
 
 // sound (engine-like layered synth)
@@ -752,16 +770,29 @@ function tick(now) {
   state.x += state.vx * dt;
   state.z += state.vz * dt;
 
-  const hardWallDistSq = roadDistanceSq(state.x, state.z);
-  if (hardWallDistSq > guardWallLimit ** 2) {
-    // solid guard wall: keep a tiny shoulder then block completely
-    state.x = prevX;
-    state.z = prevZ;
-    vForward *= 0.08;
-    vLateral *= 0.04;
-    state.vx = fwd.x * vForward + right.x * vLateral;
-    state.vz = fwd.y * vForward + right.y * vLateral;
-    state.yawRate *= 0.4;
+  const wallSample = nearestTrackSample(state.x, state.z);
+  if (wallSample.distSq > guardWallLimit ** 2) {
+    // bounce from guard wall instead of sticking
+    const toCar = new THREE.Vector2(state.x - wallSample.point.x, state.z - wallSample.point.z);
+    const sideSign = toCar.dot(wallSample.right) >= 0 ? 1 : -1;
+    const normal = wallSample.right.clone().multiplyScalar(sideSign).normalize();
+
+    // snap just inside guard line
+    const snap = guardWallLimit * 0.985;
+    state.x = wallSample.point.x + normal.x * snap;
+    state.z = wallSample.point.z + normal.y * snap;
+
+    const vel = new THREE.Vector2(state.vx, state.vz);
+    const vn = vel.dot(normal);
+    const vt = vel.clone().sub(normal.clone().multiplyScalar(vn));
+    const reflectedVn = vn > 0 ? -vn * 0.45 : vn * 0.25;
+    const bounced = vt.multiplyScalar(0.92).add(normal.clone().multiplyScalar(reflectedVn));
+
+    state.vx = bounced.x;
+    state.vz = bounced.y;
+    vForward = state.vx * fwd.x + state.vz * fwd.y;
+    vLateral = state.vx * right.x + state.vz * right.y;
+    state.yawRate *= 0.68;
   }
 
   // skid mark trigger (hard brake / lateral slip)
