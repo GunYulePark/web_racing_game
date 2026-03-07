@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Racing Prototype</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="hud">
+    <div class="panel left top">
+      <div class="speed" id="speedText">0 km/h</div>
+      <div class="small">GEAR <span id="gearText">1</span></div>
+      <div class="bar"><div id="throttleBar" class="fill throttle"></div></div>
+      <div class="bar"><div id="brakeBar" class="fill brake"></div></div>
+      <div class="bar"><div id="rpmBar" class="fill rpm"></div></div>
+      <div class="small">RPM</div>
+    </div>
+
+    <div class="panel right top">
+      <div>LAP <span id="lapText">1/7</span></div>
+      <div>BEST <span id="bestText">--</span></div>
+      <div>NOW <span id="nowText">0.000s</span></div>
+      <div class="small">WASD/방향키 · 브레이크: S/↓/Space · R 재시작</div>
+    </div>
+
+    <div class="panel left bottom minimap-wrap">
+      <canvas id="minimap" width="180" height="180"></canvas>
+    </div>
+
+    <div class="panel right bottom gauge-wrap">
+      <svg id="speedGauge" viewBox="0 0 220 220" aria-hidden="true">
+        <circle cx="110" cy="110" r="92" class="g-bg" />
+        <path id="gArc" class="g-arc" d="" />
+        <line id="gNeedle" x1="110" y1="110" x2="110" y2="44" class="g-needle" />
+        <circle cx="110" cy="110" r="5" class="g-center" />
+        <text x="110" y="146" text-anchor="middle" class="g-speed" id="gSpeedText">0</text>
+        <text x="110" y="166" text-anchor="middle" class="g-unit">km/h</text>
+      </svg>
+    </div>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>

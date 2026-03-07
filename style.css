@@ -1,0 +1,27 @@
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #080b10; font-family: Inter, Arial, sans-serif; }
+canvas { display: block; }
+#hud { position: fixed; inset: 0; pointer-events: none; color: #eaf2ff; }
+.panel { position: absolute; background: rgba(8,12,18,.58); border: 1px solid rgba(255,255,255,.2); padding: 10px 12px; border-radius: 10px; min-width: 190px; backdrop-filter: blur(2px); }
+.left { left: 14px; }
+.right { right: 14px; }
+.top { top: 14px; }
+.bottom { bottom: 14px; }
+.speed { font-size: 34px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+.small { font-size: 12px; opacity: .85; margin-top: 4px; }
+.bar { width: 170px; height: 10px; background: rgba(255,255,255,.15); border-radius: 999px; margin-top: 7px; overflow: hidden; }
+.fill { height: 100%; width: 0%; transition: width .05s linear; }
+.throttle { background: linear-gradient(90deg, #4bc784, #8ff0b2); }
+.brake { background: linear-gradient(90deg, #dd4d4d, #ff8888); }
+.rpm { background: linear-gradient(90deg, #58b7ff, #a6dcff); }
+
+.minimap-wrap { min-width: 0; padding: 8px; }
+#minimap { width: 180px; height: 180px; display:block; border-radius: 8px; }
+
+.gauge-wrap { min-width: 0; width: 220px; height: 220px; padding: 0; border-radius: 999px; display:grid; place-items:center; }
+#speedGauge { width: 220px; height: 220px; }
+.g-bg { fill: rgba(19,26,40,.72); stroke: rgba(255,255,255,.2); stroke-width: 2; }
+.g-arc { fill: none; stroke: #59b7ff; stroke-width: 11; stroke-linecap: round; }
+.g-needle { stroke: #ffdf77; stroke-width: 4; stroke-linecap: round; }
+.g-center { fill: #f2f2f2; }
+.g-speed { fill: #f4f8ff; font-size: 30px; font-weight: 800; }
+.g-unit { fill: #d0d9ea; font-size: 12px; }
