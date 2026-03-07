@@ -1,12 +1,14 @@
 import * as THREE from 'https://esm.sh/three@0.164.1';
 import { GLTFLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/DRACOLoader.js';
+import { FBXLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/FBXLoader.js';
 
 const speedText = document.getElementById('speedText');
 const gearText = document.getElementById('gearText');
 const lapText = document.getElementById('lapText');
 const bestText = document.getElementById('bestText');
 const nowText = document.getElementById('nowText');
+const penaltyText = document.getElementById('penaltyText');
 const throttleBar = document.getElementById('throttleBar');
 const brakeBar = document.getElementById('brakeBar');
 const rpmBar = document.getElementById('rpmBar');
@@ -15,11 +17,12 @@ const mm = minimap.getContext('2d');
 const gArc = document.getElementById('gArc');
 const gNeedle = document.getElementById('gNeedle');
 const gSpeedText = document.getElementById('gSpeedText');
-
-const btnLeft = document.getElementById('btnLeft');
-const btnRight = document.getElementById('btnRight');
-const btnThrottle = document.getElementById('btnThrottle');
-const btnBrake = document.getElementById('btnBrake');
+const carSelect = document.getElementById('carSelect');
+const carStats = document.getElementById('carStats');
+const startMenu = document.getElementById('startMenu');
+const startCarSelect = document.getElementById('startCarSelect');
+const trackSelect = document.getElementById('trackSelect');
+const startRaceBtn = document.getElementById('startRaceBtn');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -58,55 +61,49 @@ const ground = new THREE.Mesh(
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
-// Track path
-// Reference-like winding course (top-right hairpin + lower loop)
-const pts = [
-  // bottom straight (start/finish)
-  new THREE.Vector3(-350, 0, 330),
-  new THREE.Vector3(-220, 0, 330),
-  new THREE.Vector3(-60, 0, 330),
-  new THREE.Vector3(120, 0, 330),
-  new THREE.Vector3(280, 0, 330),
-  new THREE.Vector3(360, 0, 280),
+const TRACKS = {
+  classic: [
+    new THREE.Vector3(-320, 0, -40),
+    new THREE.Vector3(-250, 0, -190),
+    new THREE.Vector3(-40, 0, -250),
+    new THREE.Vector3(180, 0, -200),
+    new THREE.Vector3(315, 0, -70),
+    new THREE.Vector3(320, 0, 70),
+    new THREE.Vector3(210, 0, 145),
+    new THREE.Vector3(45, 0, 155),
+    new THREE.Vector3(-60, 0, 105),
+    new THREE.Vector3(10, 0, 20),
+    new THREE.Vector3(180, 0, 40),
+    new THREE.Vector3(260, 0, 190),
+    new THREE.Vector3(120, 0, 300),
+    new THREE.Vector3(-90, 0, 315),
+    new THREE.Vector3(-280, 0, 260),
+    new THREE.Vector3(-355, 0, 120),
+  ],
+  stadium: [
+    new THREE.Vector3(-300, 0, 140),
+    new THREE.Vector3(-350, 0, 20),
+    new THREE.Vector3(-300, 0, -110),
+    new THREE.Vector3(-120, 0, -150),
+    new THREE.Vector3(120, 0, -155),
+    new THREE.Vector3(290, 0, -120),
+    new THREE.Vector3(350, 0, -20),
+    new THREE.Vector3(285, 0, 105),
+    new THREE.Vector3(120, 0, 145),
+    new THREE.Vector3(5, 0, 45),
+    new THREE.Vector3(-90, 0, 125),
+  ],
+};
 
-  // right side up + inner snake
-  new THREE.Vector3(360, 0, 170),
-  new THREE.Vector3(300, 0, 90),
-  new THREE.Vector3(180, 0, 110),
-  new THREE.Vector3(85, 0, 150),
-  new THREE.Vector3(150, 0, 200),
-  new THREE.Vector3(260, 0, 220),
-  new THREE.Vector3(330, 0, 150),
-
-  // top-right arc
-  new THREE.Vector3(340, 0, 20),
-  new THREE.Vector3(260, 0, -80),
-  new THREE.Vector3(120, 0, -110),
-
-  // mid S-turn bridge
-  new THREE.Vector3(20, 0, -60),
-  new THREE.Vector3(-30, 0, 20),
-  new THREE.Vector3(-70, 0, 70),
-  new THREE.Vector3(-120, 0, 40),
-  new THREE.Vector3(-110, 0, -20),
-
-  // left hairpin block
-  new THREE.Vector3(-180, 0, -95),
-  new THREE.Vector3(-300, 0, -90),
-  new THREE.Vector3(-360, 0, -10),
-  new THREE.Vector3(-320, 0, 90),
-  new THREE.Vector3(-250, 0, 150),
-  new THREE.Vector3(-250, 0, 230),
-  new THREE.Vector3(-300, 0, 290),
-];
-const curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.2);
-
-const mapBounds = pts.reduce((acc, p) => ({
-  minX: Math.min(acc.minX, p.x),
-  maxX: Math.max(acc.maxX, p.x),
-  minZ: Math.min(acc.minZ, p.z),
-  maxZ: Math.max(acc.maxZ, p.z),
-}), { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity });
+let currentTrackKey = 'classic';
+let curve = null;
+let mapBounds = { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
+let checkpoints = [];
+let startP = new THREE.Vector3();
+let startDir = new THREE.Vector3(0, 0, 1);
+let roadMesh = null;
+let curbMesh = null;
+let startLine = null;
 
 // Continuous road strips (no segment gaps)
 const roadMat = new THREE.MeshStandardMaterial({ color: '#3a4150', roughness: .88, metalness: .03 });
@@ -149,8 +146,41 @@ function buildRibbon(width, y, mat) {
   return m;
 }
 
-buildRibbon(curbW, 0.22, edgeMat);
-buildRibbon(roadW, 0.5, roadMat);
+function setTrack(trackKey = 'classic') {
+  currentTrackKey = TRACKS[trackKey] ? trackKey : 'classic';
+  const pts = TRACKS[currentTrackKey];
+  curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.2);
+  mapBounds = pts.reduce((acc, p) => ({
+    minX: Math.min(acc.minX, p.x),
+    maxX: Math.max(acc.maxX, p.x),
+    minZ: Math.min(acc.minZ, p.z),
+    maxZ: Math.max(acc.maxZ, p.z),
+  }), { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity });
+
+  if (curbMesh) scene.remove(curbMesh);
+  if (roadMesh) scene.remove(roadMesh);
+  if (startLine) scene.remove(startLine);
+
+  curbMesh = buildRibbon(curbW, 0.22, edgeMat);
+  roadMesh = buildRibbon(roadW, 0.5, roadMat);
+
+  startP = curve.getPointAt(0);
+  const startP2 = curve.getPointAt(1 / segCount);
+  startDir = new THREE.Vector3().subVectors(startP2, startP).normalize();
+  const startRight = new THREE.Vector3(-startDir.z, 0, startDir.x);
+
+  startLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(roadW * 0.92, 2.8),
+    new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.95, side: THREE.DoubleSide })
+  );
+  startLine.rotation.x = -Math.PI / 2;
+  startLine.rotation.z = Math.atan2(startRight.y, startRight.x);
+  startLine.position.set(startP.x, 0.72, startP.z);
+  scene.add(startLine);
+
+  checkpoints = Array.from({ length: 8 }, (_, i) => curve.getPointAt(i / 8));
+  resetCar();
+}
 
 // Car mesh (real sample model via GLB)
 const carRoot = new THREE.Group();
@@ -168,41 +198,159 @@ const loader = new GLTFLoader();
 const draco = new DRACOLoader();
 draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
 loader.setDRACOLoader(draco);
-loader.load(
-  'https://threejs.org/examples/models/gltf/ferrari.glb',
-  (gltf) => {
-    carRoot.clear();
-    const model = gltf.scene;
+const fbxLoader = new FBXLoader();
+const texLoader = new THREE.TextureLoader();
 
-    model.traverse((obj) => {
-      if (obj.isMesh) {
-        obj.castShadow = false;
-        obj.receiveShadow = false;
-      }
-    });
-
-    // normalize model size and orientation for this game scale
-    const box = new THREE.Box3().setFromObject(model);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const targetLength = 15.0;
-    const scale = targetLength / Math.max(size.x, size.z, 0.001);
-    model.scale.setScalar(scale);
-
-    // rotate so car faces +Z in our movement convention
-    model.rotation.y = Math.PI;
-
-    // place so wheels/body sit near y=0 plane
-    const box2 = new THREE.Box3().setFromObject(model);
-    model.position.y += -box2.min.y + 0.15;
-
-    carRoot.add(model);
+const CAR_MODELS = {
+  ferrari: {
+    label: 'Ferrari',
+    type: 'gltf',
+    url: 'https://threejs.org/examples/models/gltf/ferrari.glb',
+    stats: { topSpeed: 220, accel: 150, brake: 165, handling: 1.05 },
   },
-  undefined,
-  () => {
-    // keep fallback silently
+  lowpoly1: {
+    label: 'Low Poly Car 1',
+    type: 'fbx',
+    url: './assets/cars/lowpoly/car_1.fbx',
+    texture: './assets/cars/lowpoly/car_texture_1.png',
+    stats: { topSpeed: 192, accel: 128, brake: 148, handling: 1.15 },
+  },
+  lowpoly2: {
+    label: 'Low Poly Car 2',
+    type: 'fbx',
+    url: './assets/cars/lowpoly/car_2.fbx',
+    texture: './assets/cars/lowpoly/car_texture_2.png',
+    stats: { topSpeed: 205, accel: 136, brake: 155, handling: 0.98 },
+  },
+};
+
+let currentCarKey = carSelect?.value || 'ferrari';
+let currentCarStats = CAR_MODELS[currentCarKey]?.stats || CAR_MODELS.ferrari.stats;
+
+function updateCarStatsUI() {
+  const cfg = CAR_MODELS[currentCarKey] || CAR_MODELS.ferrari;
+  const s = cfg.stats;
+  if (!carStats) return;
+  carStats.textContent = `${cfg.label}\nTOP ${s.topSpeed} km/h · ACC ${s.accel}\nBRK ${s.brake} · HDL ${(s.handling * 100).toFixed(0)}%`;
+}
+
+function prepareModel(model, extraRotationY = 0) {
+  model.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.castShadow = false;
+      obj.receiveShadow = false;
+    }
+  });
+
+  const box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const targetLength = 15.0;
+  const scale = targetLength / Math.max(size.x, size.z, 0.001);
+  model.scale.setScalar(scale);
+  model.rotation.y += extraRotationY;
+
+  const box2 = new THREE.Box3().setFromObject(model);
+  model.position.y += -box2.min.y + 0.15;
+  return model;
+}
+
+function setFallbackVisible(visible) {
+  fallback.visible = visible;
+}
+
+function loadCarModel(key = 'ferrari') {
+  currentCarKey = CAR_MODELS[key] ? key : 'ferrari';
+  const cfg = CAR_MODELS[currentCarKey] || CAR_MODELS.ferrari;
+  currentCarStats = cfg.stats;
+  updateCarStatsUI();
+
+  if (cfg.type === 'gltf') {
+    loader.load(
+      cfg.url,
+      (gltf) => {
+        carRoot.clear();
+        const model = prepareModel(gltf.scene, Math.PI);
+        carRoot.add(model);
+        setFallbackVisible(false);
+      },
+      undefined,
+      () => {
+        carRoot.clear();
+        carRoot.add(fallback);
+        setFallbackVisible(true);
+      }
+    );
+    return;
   }
-);
+
+  if (cfg.type === 'fbx') {
+    fbxLoader.load(
+      cfg.url,
+      (model) => {
+        const tex = cfg.texture ? texLoader.load(cfg.texture) : null;
+        if (tex) {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.flipY = false;
+        }
+
+        model.traverse((obj) => {
+          if (!obj.isMesh) return;
+          obj.castShadow = false;
+          obj.receiveShadow = false;
+
+          const baseMat = Array.isArray(obj.material) ? obj.material[0] : obj.material;
+          obj.material = new THREE.MeshStandardMaterial({
+            map: tex || null,
+            color: baseMat?.color || new THREE.Color('#e6edf8'),
+            roughness: 0.7,
+            metalness: 0.15,
+          });
+        });
+
+        carRoot.clear();
+        const normalized = prepareModel(model, Math.PI);
+        carRoot.add(normalized);
+        setFallbackVisible(false);
+      },
+      undefined,
+      () => {
+        carRoot.clear();
+        carRoot.add(fallback);
+        setFallbackVisible(true);
+      }
+    );
+  }
+}
+
+function syncCarSelectors(value) {
+  if (carSelect) carSelect.value = value;
+  if (startCarSelect) startCarSelect.value = value;
+}
+
+carSelect?.addEventListener('change', () => {
+  syncCarSelectors(carSelect.value);
+  loadCarModel(carSelect.value);
+});
+
+startCarSelect?.addEventListener('change', () => {
+  syncCarSelectors(startCarSelect.value);
+  loadCarModel(startCarSelect.value);
+});
+
+startRaceBtn?.addEventListener('click', () => {
+  setTrack(trackSelect?.value || 'classic');
+  const selectedCar = startCarSelect?.value || 'ferrari';
+  syncCarSelectors(selectedCar);
+  loadCarModel(selectedCar);
+  raceStarted = true;
+  if (startMenu) startMenu.style.display = 'none';
+  setupAudio();
+});
+
+syncCarSelectors(currentCarKey);
+loadCarModel(currentCarKey);
+setTrack('classic');
 
 // skid marks
 const skidGroup = new THREE.Group();
@@ -213,9 +361,11 @@ const skidMarks = [];
 const smokeGroup = new THREE.Group();
 scene.add(smokeGroup);
 const smokeParticles = [];
+let raceStarted = false;
+
 const state = {
-  x: -320, z: 330,
-  heading: Math.PI * 0.5,
+  x: 0, z: 0,
+  heading: 0,
   steer: 0,
   vx: 0,
   vz: 0,
@@ -229,11 +379,11 @@ const state = {
   nextCp: 0,
   lapStart: performance.now(),
   bestLap: null,
+  lapPenaltyMs: 0,
+  offroadAllWheels: false,
 };
 
 const keys = new Set();
-const mobileInput = { steer: 0, steerTarget: 0, throttle: 0, brake: 0 };
-
 addEventListener('keydown', (e) => {
   keys.add(e.key.toLowerCase());
   if (e.key.toLowerCase() === 'r') resetCar();
@@ -241,34 +391,7 @@ addEventListener('keydown', (e) => {
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 
-// avoid long-press text selection/copy popup on mobile controls
-['contextmenu', 'selectstart'].forEach((evt) => {
-  [btnLeft, btnRight, btnThrottle, btnBrake].forEach((el) => el?.addEventListener(evt, (e) => e.preventDefault()));
-});
 
-function setBtnHold(btn, key) {
-  const down = () => { mobileInput[key] = 1; setupAudio(); };
-  const up = () => { mobileInput[key] = 0; };
-  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); down(); });
-  btn.addEventListener('pointerup', up);
-  btn.addEventListener('pointercancel', up);
-  btn.addEventListener('pointerleave', up);
-}
-setBtnHold(btnThrottle, 'throttle');
-setBtnHold(btnBrake, 'brake');
-
-function setSteerBtn(btn, value) {
-  const down = (e) => { e.preventDefault(); mobileInput.steerTarget = value; setupAudio(); };
-  const up = () => { mobileInput.steerTarget = 0; };
-  btn.addEventListener('pointerdown', down);
-  btn.addEventListener('pointerup', up);
-  btn.addEventListener('pointercancel', up);
-  btn.addEventListener('pointerleave', up);
-}
-setSteerBtn(btnLeft, 1);
-setSteerBtn(btnRight, -1);
-
-const checkpoints = Array.from({ length: 8 }, (_, i) => curve.getPointAt(i / 8));
 
 function fmt(ms) { return `${(ms / 1000).toFixed(3)}s`; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -311,6 +434,10 @@ function drawMiniMap() {
   mm.closePath();
   mm.stroke();
 
+  const startM = mapToMini(startP.x, startP.z);
+  mm.fillStyle = '#ffffff';
+  mm.fillRect(startM.x - 4, startM.y - 4, 8, 8);
+
   const cp = checkpoints[state.nextCp];
   const cpM = mapToMini(cp.x, cp.z);
   mm.fillStyle = '#ffd86b';
@@ -323,14 +450,17 @@ function drawMiniMap() {
 
 
 function resetCar() {
-  state.x = -320; state.z = 330;
-  state.heading = Math.PI * 0.5;
+  state.x = startP.x;
+  state.z = startP.z;
+  state.heading = Math.atan2(startDir.x, startDir.z);
   state.vx = 0; state.vz = 0; state.yawRate = 0; state.steer = 0;
   state.skidCd = 0;
   state.brakePedal = 0;
   state.gear = 1; state.rpm = 0.25; state.shiftLock = 0;
   state.lap = 1; state.nextCp = 0;
   state.lapStart = performance.now();
+  state.lapPenaltyMs = 0;
+  state.offroadAllWheels = false;
 
   // clear skid marks + smoke
   skidMarks.length = 0;
@@ -463,20 +593,16 @@ function tick(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
   last = now;
 
-  const keyThrottle = (keys.has('arrowup') || keys.has('w')) ? 1 : 0;
-  const keyBrake = (keys.has('arrowdown') || keys.has('s') || keys.has(' ')) ? 1 : 0;
-  const throttle = Math.max(keyThrottle, mobileInput.throttle);
-  const brakeTarget = Math.max(keyBrake, mobileInput.brake);
+  const throttle = raceStarted && (keys.has('arrowup') || keys.has('w')) ? 1 : 0;
+  const brakeTarget = raceStarted && (keys.has('arrowdown') || keys.has('s') || keys.has(' ')) ? 1 : 0;
   // gradual brake pedal response
   state.brakePedal += (brakeTarget - state.brakePedal) * Math.min(1, dt * (brakeTarget ? 4.5 : 3.2));
   const brake = state.brakePedal;
 
-  // keyboard + touch steer (left positive in this coordinate setup)
-  // mobile steer: analog ramp (not just 0/1)
-  mobileInput.steer += (mobileInput.steerTarget - mobileInput.steer) * Math.min(1, dt * (Math.abs(mobileInput.steerTarget) > 0 ? 6.0 : 8.0));
-
-  const keySteer = (keys.has('arrowleft') || keys.has('a') ? 1 : 0) + (keys.has('arrowright') || keys.has('d') ? -1 : 0);
-  const steerIn = clamp(keySteer + mobileInput.steer, -1, 1);
+  // invert fixed: left key should steer left on screen
+  const steerIn = raceStarted
+    ? ((keys.has('arrowleft') || keys.has('a') ? 1 : 0) + (keys.has('arrowright') || keys.has('d') ? -1 : 0))
+    : 0;
 
   const fwd = new THREE.Vector2(Math.sin(state.heading), Math.cos(state.heading));
   const right = new THREE.Vector2(fwd.y, -fwd.x);
@@ -486,21 +612,31 @@ function tick(now) {
   const speed = Math.hypot(state.vx, state.vz);
   const distSq = roadDistanceSq(state.x, state.z);
   const onRoad = distSq < (roadW * 0.9) ** 2;
-  const grip = onRoad ? 2.4 : 1.0;
 
-  const steerLimit = 0.62 * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
+  const wheelHalf = 2.4;
+  const leftWheelDistSq = roadDistanceSq(state.x + right.x * wheelHalf, state.z + right.y * wheelHalf);
+  const rightWheelDistSq = roadDistanceSq(state.x - right.x * wheelHalf, state.z - right.y * wheelHalf);
+  const bothWheelsOffRoad = leftWheelDistSq > (roadW * 0.92) ** 2 && rightWheelDistSq > (roadW * 0.92) ** 2;
+  if (bothWheelsOffRoad && !state.offroadAllWheels) {
+    state.lapPenaltyMs += 2000;
+  }
+  state.offroadAllWheels = bothWheelsOffRoad;
+
+  const grip = onRoad ? (2.4 * currentCarStats.handling) : (1.0 * currentCarStats.handling * 0.72);
+
+  const steerLimit = 0.62 * currentCarStats.handling * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
   const steerTarget = steerIn * steerLimit;
   state.steer += (steerTarget - state.steer) * Math.min(1, dt * 7.5);
 
   let aLong = 0;
-  if (throttle) aLong += 140;
-  if (brake) aLong -= 155 * brake * Math.sign(vForward || 1);
+  if (throttle) aLong += currentCarStats.accel;
+  if (brake) aLong -= currentCarStats.brake * brake * Math.sign(vForward || 1);
   aLong -= 1.05 * vForward;
   aLong -= 0.0048 * vForward * Math.abs(vForward);
   if (!onRoad) aLong -= 45 * Math.sign(vForward || 0);
 
   vForward += aLong * dt;
-  vForward = clamp(vForward, -45, 170);
+  vForward = clamp(vForward, -45, currentCarStats.topSpeed / 1.18);
   vLateral *= Math.exp(-grip * dt);
 
   const targetYaw = Math.abs(vForward) > 0.5 ? (vForward / 3.4) * Math.tan(state.steer) : 0;
@@ -544,9 +680,11 @@ function tick(now) {
     state.nextCp++;
     if (state.nextCp >= checkpoints.length) {
       state.nextCp = 0;
-      const lapMs = now - state.lapStart;
+      const lapMs = now - state.lapStart + state.lapPenaltyMs;
       state.bestLap = state.bestLap ? Math.min(state.bestLap, lapMs) : lapMs;
       state.lapStart = now;
+      state.lapPenaltyMs = 0;
+      state.offroadAllWheels = false;
       state.lap++;
     }
   }
@@ -591,14 +729,15 @@ function tick(now) {
   gearText.textContent = state.gear;
   lapText.textContent = `${Math.min(7, state.lap)}/7`;
   bestText.textContent = state.bestLap ? fmt(state.bestLap) : '--';
-  nowText.textContent = fmt(now - state.lapStart);
+  nowText.textContent = fmt((now - state.lapStart) + state.lapPenaltyMs);
+  penaltyText.textContent = `+${(state.lapPenaltyMs / 1000).toFixed(3)}s`;
   throttleBar.style.width = `${throttle * 100}%`;
   brakeBar.style.width = `${brake * 100}%`;
   rpmBar.style.width = `${state.rpm * 100}%`;
 
   // side minimap + speed gauge
   drawMiniMap();
-  const speedNorm = clamp(kmh / 220, 0, 1);
+  const speedNorm = clamp(kmh / Math.max(140, currentCarStats.topSpeed), 0, 1);
   const startDeg = 210;
   const endDeg = startDeg + speedNorm * 300;
   gArc.setAttribute('d', describeArc(110, 110, 86, startDeg, endDeg));

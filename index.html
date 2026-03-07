@@ -7,6 +7,24 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="startMenu" class="start-menu">
+    <div class="start-card">
+      <h2>Race Setup</h2>
+      <label>차량 선택</label>
+      <select id="startCarSelect" class="car-select">
+        <option value="ferrari">Ferrari (기본)</option>
+        <option value="lowpoly1">Low Poly Car 1</option>
+        <option value="lowpoly2">Low Poly Car 2</option>
+      </select>
+      <label>트랙 선택</label>
+      <select id="trackSelect" class="car-select">
+        <option value="classic">Classic Track</option>
+        <option value="stadium">Stadium Triangle</option>
+      </select>
+      <button id="startRaceBtn" class="start-btn">레이스 시작</button>
+    </div>
+  </div>
+
   <div id="hud">
     <div class="panel left top">
       <div class="speed" id="speedText">0 km/h</div>
@@ -21,6 +39,14 @@
       <div>LAP <span id="lapText">1/7</span></div>
       <div>BEST <span id="bestText">--</span></div>
       <div>NOW <span id="nowText">0.000s</span></div>
+      <div>PENALTY <span id="penaltyText">+0.000s</span></div>
+      <div class="small">CAR MODEL</div>
+      <select id="carSelect" class="car-select">
+        <option value="ferrari">Ferrari (기본)</option>
+        <option value="lowpoly1">Low Poly Car 1</option>
+        <option value="lowpoly2">Low Poly Car 2</option>
+      </select>
+      <div id="carStats" class="car-stats"></div>
       <div class="small">WASD/방향키 · 브레이크: S/↓/Space · R 재시작</div>
     </div>
 
@@ -37,17 +63,6 @@
         <text x="110" y="146" text-anchor="middle" class="g-speed" id="gSpeedText">0</text>
         <text x="110" y="166" text-anchor="middle" class="g-unit">km/h</text>
       </svg>
-    </div>
-  </div>
-
-  <div id="mobileControls" class="mobile-controls">
-    <div class="buttons left-buttons">
-      <button id="btnLeft" class="ctrl-btn steer">◀ LEFT</button>
-      <button id="btnRight" class="ctrl-btn steer">RIGHT ▶</button>
-    </div>
-    <div class="buttons">
-      <button id="btnThrottle" class="ctrl-btn accel">ACCEL</button>
-      <button id="btnBrake" class="ctrl-btn brake">BRAKE</button>
     </div>
   </div>
 

@@ -1,5 +1,35 @@
-html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #080b10; font-family: Inter, Arial, sans-serif; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #080b10; font-family: Inter, Arial, sans-serif; }
 canvas { display: block; }
+.start-menu {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 15, 0.72);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+.start-card {
+  width: min(360px, 92vw);
+  background: rgba(8,12,18,.92);
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 12px;
+  padding: 16px;
+  color: #eef4ff;
+  box-shadow: 0 12px 30px rgba(0,0,0,.35);
+}
+.start-card h2 { margin: 0 0 12px; font-size: 20px; }
+.start-card label { display: block; font-size: 12px; opacity: .85; margin-top: 8px; }
+.start-btn {
+  margin-top: 14px;
+  width: 100%;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: linear-gradient(90deg, #4f9cff, #5fe4ff);
+  color: #08101d;
+  font-weight: 700;
+  cursor: pointer;
+}
 #hud { position: fixed; inset: 0; pointer-events: none; color: #eaf2ff; }
 .panel { position: absolute; background: rgba(8,12,18,.58); border: 1px solid rgba(255,255,255,.2); padding: 10px 12px; border-radius: 10px; min-width: 190px; backdrop-filter: blur(2px); }
 .left { left: 14px; }
@@ -8,6 +38,27 @@ canvas { display: block; }
 .bottom { bottom: 14px; }
 .speed { font-size: 34px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
 .small { font-size: 12px; opacity: .85; margin-top: 4px; }
+.car-select {
+  pointer-events: auto;
+  margin-top: 6px;
+  margin-bottom: 4px;
+  width: 100%;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.25);
+  background: rgba(12, 20, 32, 0.88);
+  color: #eef5ff;
+  padding: 0 8px;
+}
+.car-stats {
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: .9;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  color: #cfe2ff;
+  white-space: pre-line;
+}
 .bar { width: 170px; height: 10px; background: rgba(255,255,255,.15); border-radius: 999px; margin-top: 7px; overflow: hidden; }
 .fill { height: 100%; width: 0%; transition: width .05s linear; }
 .throttle { background: linear-gradient(90deg, #4bc784, #8ff0b2); }
@@ -25,20 +76,3 @@ canvas { display: block; }
 .g-center { fill: #f2f2f2; }
 .g-speed { fill: #f4f8ff; font-size: 30px; font-weight: 800; }
 .g-unit { fill: #d0d9ea; font-size: 12px; }
-
-.mobile-controls { position: fixed; left: 0; right: 0; bottom: 8px; display: none; justify-content: space-between; align-items: end; padding: 0 10px; pointer-events: none; }
-.buttons { display: flex; gap: 8px; pointer-events: auto; }
-.left-buttons { margin-right: 8px; }
-.ctrl-btn { min-width: 88px; height: 52px; border-radius: 12px; border: 1px solid rgba(255,255,255,.25); color: white; font-weight: 700; background: rgba(20,28,40,.55); touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-.ctrl-btn.accel { background: rgba(51,165,97,.72); }
-.ctrl-btn.brake { background: rgba(183,66,66,.72); }
-.ctrl-btn.steer { background: rgba(70,110,170,.72); min-width: 98px; }
-
-@media (max-width: 900px), (pointer: coarse) {
-  .mobile-controls { display: flex; }
-  .panel.top { transform: scale(.9); transform-origin: top; }
-  .panel.bottom.minimap-wrap { width: 130px; }
-  #minimap { width: 130px; height: 130px; }
-  .gauge-wrap { width: 170px; height: 170px; }
-  #speedGauge { width: 170px; height: 170px; }
-}
