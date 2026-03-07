@@ -85,17 +85,23 @@ const TRACKS = {
     new THREE.Vector3(-355, 0, 120),
   ],
   stadium: [
-    new THREE.Vector3(-300, 0, 140),
-    new THREE.Vector3(-350, 0, 20),
-    new THREE.Vector3(-300, 0, -110),
-    new THREE.Vector3(-120, 0, -150),
-    new THREE.Vector3(120, 0, -155),
-    new THREE.Vector3(290, 0, -120),
-    new THREE.Vector3(350, 0, -20),
-    new THREE.Vector3(285, 0, 105),
-    new THREE.Vector3(120, 0, 145),
-    new THREE.Vector3(5, 0, 45),
-    new THREE.Vector3(-90, 0, 125),
+    new THREE.Vector3(-335, 0, 90),
+    new THREE.Vector3(-345, 0, -20),
+    new THREE.Vector3(-275, 0, -145),
+    new THREE.Vector3(-95, 0, -210),
+    new THREE.Vector3(110, 0, -215),
+    new THREE.Vector3(285, 0, -165),
+    new THREE.Vector3(350, 0, -40),
+    new THREE.Vector3(330, 0, 95),
+    new THREE.Vector3(215, 0, 185),
+    new THREE.Vector3(40, 0, 205),
+    new THREE.Vector3(-110, 0, 158),
+    new THREE.Vector3(-40, 0, 58),
+    new THREE.Vector3(120, 0, 82),
+    new THREE.Vector3(190, 0, 210),
+    new THREE.Vector3(40, 0, 325),
+    new THREE.Vector3(-160, 0, 318),
+    new THREE.Vector3(-305, 0, 235),
   ],
 };
 
@@ -115,6 +121,12 @@ const edgeMat = new THREE.MeshStandardMaterial({ color: '#c2c9d3', roughness: 0.
 const curbW = 48;
 const roadW = 40;
 const segCount = 900;
+const guardMargin = 3.2;
+const guardWallLimit = roadW * 0.5 + guardMargin;
+
+const wallBlocks = new THREE.Group();
+scene.add(wallBlocks);
+const wallMat = new THREE.MeshStandardMaterial({ color: '#e7edf8', roughness: 0.7, metalness: 0.08 });
 
 function buildRibbon(width, y, mat) {
   const positions = [];
@@ -150,6 +162,33 @@ function buildRibbon(width, y, mat) {
   return m;
 }
 
+function buildGuardWalls() {
+  while (wallBlocks.children.length) wallBlocks.remove(wallBlocks.children[0]);
+
+  const blockGeo = new THREE.BoxGeometry(3.8, 3.2, 3.8);
+  const steps = 260;
+  const sideOffset = guardWallLimit + 1.6;
+
+  for (let i = 0; i < steps; i++) {
+    const t = i / steps;
+    const p = curve.getPointAt(t);
+    const p2 = curve.getPointAt((t + 1 / steps) % 1);
+    const dir = new THREE.Vector3().subVectors(p2, p).normalize();
+    const right = new THREE.Vector3(-dir.z, 0, dir.x);
+
+    const leftPos = p.clone().addScaledVector(right, -sideOffset);
+    const rightPos = p.clone().addScaledVector(right, sideOffset);
+
+    const lBlock = new THREE.Mesh(blockGeo, wallMat);
+    lBlock.position.set(leftPos.x, 2.0, leftPos.z);
+    wallBlocks.add(lBlock);
+
+    const rBlock = new THREE.Mesh(blockGeo, wallMat);
+    rBlock.position.set(rightPos.x, 2.0, rightPos.z);
+    wallBlocks.add(rBlock);
+  }
+}
+
 function setTrack(trackKey = 'classic') {
   currentTrackKey = TRACKS[trackKey] ? trackKey : 'classic';
   const pts = TRACKS[currentTrackKey];
@@ -167,6 +206,7 @@ function setTrack(trackKey = 'classic') {
 
   curbMesh = buildRibbon(curbW, 0.22, edgeMat);
   roadMesh = buildRibbon(roadW, 0.5, roadMat);
+  buildGuardWalls();
 
   startP = curve.getPointAt(0);
   const startP2 = curve.getPointAt(1 / segCount);
@@ -706,8 +746,23 @@ function tick(now) {
 
   state.vx = fwd.x * vForward + right.x * vLateral;
   state.vz = fwd.y * vForward + right.y * vLateral;
+
+  const prevX = state.x;
+  const prevZ = state.z;
   state.x += state.vx * dt;
   state.z += state.vz * dt;
+
+  const hardWallDistSq = roadDistanceSq(state.x, state.z);
+  if (hardWallDistSq > guardWallLimit ** 2) {
+    // solid guard wall: keep a tiny shoulder then block completely
+    state.x = prevX;
+    state.z = prevZ;
+    vForward *= 0.08;
+    vLateral *= 0.04;
+    state.vx = fwd.x * vForward + right.x * vLateral;
+    state.vz = fwd.y * vForward + right.y * vLateral;
+    state.yawRate *= 0.4;
+  }
 
   // skid mark trigger (hard brake / lateral slip)
   state.skidCd = Math.max(0, state.skidCd - dt);
