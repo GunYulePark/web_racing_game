@@ -221,7 +221,7 @@ const CAR_MODELS = {
     texture: './assets/cars/lowpoly/car_texture_1.png',
     stats: { topSpeed: 192, accel: 128, brake: 148, handling: 1.15 },
     rotFix: { x: -Math.PI / 2, y: 0, z: 0 },
-    yawOffset: Math.PI / 2,
+    yawOffset: -Math.PI / 2,
   },
   lowpoly2: {
     label: 'Low Poly Car 2',
@@ -230,7 +230,7 @@ const CAR_MODELS = {
     texture: './assets/cars/lowpoly/car_texture_2.png',
     stats: { topSpeed: 205, accel: 136, brake: 155, handling: 0.98 },
     rotFix: { x: -Math.PI / 2, y: 0, z: 0 },
-    yawOffset: Math.PI / 2,
+    yawOffset: -Math.PI / 2,
   },
 };
 
