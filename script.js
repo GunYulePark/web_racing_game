@@ -747,14 +747,27 @@ function tick(now) {
   state.steer += (steerTarget - state.steer) * Math.min(1, dt * 7.5);
 
   let aLong = 0;
-  if (throttle) aLong += currentCarStats.accel;
-  if (brake) aLong -= currentCarStats.brake * brake * Math.sign(vForward || 1);
+  const reverseIntent = brake > 0.2 && throttle === 0 && Math.abs(vForward) < 9;
+
+  if (throttle) {
+    aLong += currentCarStats.accel;
+  } else if (reverseIntent) {
+    // hold brake at low speed -> engage reverse
+    aLong -= (currentCarStats.accel * 0.62) * brake;
+  }
+
+  if (brake && !reverseIntent) {
+    // normal braking while rolling
+    aLong -= currentCarStats.brake * brake * Math.sign(vForward || 1);
+  }
+
   aLong -= 1.05 * vForward;
   aLong -= 0.0048 * vForward * Math.abs(vForward);
   if (!onRoad) aLong -= 45 * Math.sign(vForward || 0);
 
   vForward += aLong * dt;
-  vForward = clamp(vForward, -45, currentCarStats.topSpeed / 1.18);
+  const reverseMax = -68;
+  vForward = clamp(vForward, reverseMax, currentCarStats.topSpeed / 1.18);
   vLateral *= Math.exp(-grip * dt);
 
   const targetYaw = Math.abs(vForward) > 0.5 ? (vForward / 3.4) * Math.tan(state.steer) : 0;
