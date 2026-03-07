@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-8';
+const BUILD_VERSION = 'racing v2026.03.07-9';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -89,45 +89,41 @@ const TRACKS = {
     new THREE.Vector3(-355, 0, 120),
   ],
   stadium: [
-    // longer, real-circuit-like layout (long straights + mixed corner complexes)
-    new THREE.Vector3(-760, 0, 90),
-    new THREE.Vector3(-560, 0, 86),
-    new THREE.Vector3(-330, 0, 80),
-    new THREE.Vector3(-80, 0, 72),
-    new THREE.Vector3(190, 0, 62),
-    new THREE.Vector3(430, 0, 48),
-    new THREE.Vector3(650, 0, 26),
+    // long straight + non-intersecting clockwise loop (no branch/cross)
+    new THREE.Vector3(-760, 0, 70),
+    new THREE.Vector3(-560, 0, 64),
+    new THREE.Vector3(-330, 0, 58),
+    new THREE.Vector3(-80, 0, 52),
+    new THREE.Vector3(180, 0, 46),
+    new THREE.Vector3(420, 0, 38),
+    new THREE.Vector3(630, 0, 18),
 
-    // end of main straight -> tight right hairpin
     new THREE.Vector3(760, 0, -80),
-    new THREE.Vector3(760, 0, -255),
-    new THREE.Vector3(650, 0, -395),
+    new THREE.Vector3(790, 0, -240),
+    new THREE.Vector3(730, 0, -380),
 
-    // flowing high-speed bends
-    new THREE.Vector3(470, 0, -470),
-    new THREE.Vector3(250, 0, -490),
-    new THREE.Vector3(70, 0, -450),
-    new THREE.Vector3(-90, 0, -515),
-    new THREE.Vector3(-290, 0, -485),
+    new THREE.Vector3(560, 0, -500),
+    new THREE.Vector3(330, 0, -560),
+    new THREE.Vector3(100, 0, -585),
+    new THREE.Vector3(-140, 0, -580),
+    new THREE.Vector3(-380, 0, -545),
 
-    // back straight section
-    new THREE.Vector3(-500, 0, -420),
-    new THREE.Vector3(-670, 0, -315),
-    new THREE.Vector3(-780, 0, -170),
+    new THREE.Vector3(-600, 0, -470),
+    new THREE.Vector3(-760, 0, -350),
+    new THREE.Vector3(-840, 0, -200),
 
-    // final sector: chicane + long return curve
-    new THREE.Vector3(-800, 0, -10),
-    new THREE.Vector3(-730, 0, 130),
-    new THREE.Vector3(-610, 0, 230),
-    new THREE.Vector3(-430, 0, 270),
-    new THREE.Vector3(-250, 0, 255),
-    new THREE.Vector3(-110, 0, 205),
-    new THREE.Vector3(-220, 0, 145),
-    new THREE.Vector3(-430, 0, 110),
+    new THREE.Vector3(-850, 0, -30),
+    new THREE.Vector3(-790, 0, 130),
+    new THREE.Vector3(-670, 0, 250),
+    new THREE.Vector3(-500, 0, 335),
+    new THREE.Vector3(-300, 0, 370),
+    new THREE.Vector3(-90, 0, 345),
+    new THREE.Vector3(-250, 0, 220),
+    new THREE.Vector3(-470, 0, 130),
   ],
 };
 
-let currentTrackKey = 'classic';
+let currentTrackKey = 'stadium';
 let curve = null;
 let mapBounds = { minX: -1, maxX: 1, minZ: -1, maxZ: 1 };
 let checkpoints = [];
@@ -558,7 +554,8 @@ function resetCar() {
 
 syncCarSelectors(currentCarKey);
 loadCarModel(currentCarKey);
-setTrack('classic');
+if (trackSelect) trackSelect.value = 'stadium';
+setTrack('stadium');
 
 function spawnSkidMark(x, z, heading, alpha = 0.25) {
   const m = new THREE.Mesh(
