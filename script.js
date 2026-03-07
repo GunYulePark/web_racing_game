@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-11';
+const BUILD_VERSION = 'racing v2026.03.07-12';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -494,11 +494,12 @@ const state = {
   offroadAllWheels: false,
   prevGateDist: 0,
   startGateArmed: false,
+  cpCycleReady: false,
 };
 
 const rival = {
-  t: 0.31,
-  speed: 112,
+  t: 0.985,
+  speed: 86,
   x: 0,
   z: 0,
   heading: 0,
@@ -627,12 +628,13 @@ function resetCar() {
   state.offroadAllWheels = false;
   state.prevGateDist = 0;
   state.startGateArmed = false;
+  state.cpCycleReady = false;
 
   const gateFwd = new THREE.Vector2(startDir.x, startDir.z).normalize();
   const gateDelta = new THREE.Vector2(state.x - startP.x, state.z - startP.z);
   state.prevGateDist = gateDelta.dot(gateFwd);
 
-  rival.t = 0.31;
+  rival.t = 0.985; // start just behind player
   rival.ox = 0;
   rival.oz = 0;
   rival.ovx = 0;
@@ -946,10 +948,14 @@ function tick(now) {
     spawnSmoke(sx, sz, smokeIntensity);
   }
 
-  // checkpoints (minimap guide)
+  // checkpoints: must pass all in order before lap counts
   const cp = checkpoints[state.nextCp];
   if (new THREE.Vector2(state.x, state.z).distanceTo(new THREE.Vector2(cp.x, cp.z)) < 32) {
-    state.nextCp = (state.nextCp + 1) % checkpoints.length;
+    state.nextCp += 1;
+    if (state.nextCp >= checkpoints.length) {
+      state.nextCp = 0;
+      state.cpCycleReady = true;
+    }
   }
 
   // lap timing by start line crossing
@@ -962,6 +968,7 @@ function tick(now) {
   if (Math.abs(gateDist) > 14) state.startGateArmed = true;
 
   const crossedForward = state.startGateArmed
+    && state.cpCycleReady
     && state.prevGateDist < 0
     && gateDist >= 0
     && lateral < (roadW * 0.62)
@@ -974,6 +981,7 @@ function tick(now) {
     state.lapStart = now;
     state.lapPenaltyMs = 0;
     state.offroadAllWheels = false;
+    state.cpCycleReady = false;
     state.lap++;
   }
 
