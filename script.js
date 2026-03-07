@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-6';
+const BUILD_VERSION = 'racing v2026.03.07-7';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -88,40 +88,22 @@ const TRACKS = {
     new THREE.Vector3(-280, 0, 260),
     new THREE.Vector3(-355, 0, 120),
   ],
-  stadium: [
-    // donut-like, non-self-intersecting closed loop
-    new THREE.Vector3(-560, 0, 64),
-    new THREE.Vector3(-380, 0, 58),
-    new THREE.Vector3(-180, 0, 52),
-    new THREE.Vector3(40, 0, 44),
-    new THREE.Vector3(260, 0, 34),
-    new THREE.Vector3(450, 0, 14),
-
-    new THREE.Vector3(560, 0, -80),
-    new THREE.Vector3(580, 0, -230),
-    new THREE.Vector3(500, 0, -360),
-
-    new THREE.Vector3(330, 0, -440),
-    new THREE.Vector3(120, 0, -460),
-    new THREE.Vector3(-90, 0, -445),
-    new THREE.Vector3(-290, 0, -390),
-
-    new THREE.Vector3(-460, 0, -300),
-    new THREE.Vector3(-560, 0, -170),
-    new THREE.Vector3(-600, 0, -20),
-
-    new THREE.Vector3(-595, 0, 130),
-    new THREE.Vector3(-540, 0, 250),
-    new THREE.Vector3(-440, 0, 340),
-    new THREE.Vector3(-300, 0, 395),
-    new THREE.Vector3(-130, 0, 410),
-    new THREE.Vector3(20, 0, 370),
-    new THREE.Vector3(80, 0, 280),
-
-    new THREE.Vector3(-40, 0, 200),
-    new THREE.Vector3(-220, 0, 130),
-    new THREE.Vector3(-390, 0, 90),
-  ],
+  stadium: (() => {
+    // single-loop donut-like circuit (polar function: no self-intersection)
+    const pts = [];
+    const cx = -20;
+    const cz = 20;
+    const n = 26;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      // smooth long/short sectors + one long straight feel
+      const r = 410 + 120 * Math.cos(a) - 75 * Math.cos(2 * a) + 30 * Math.sin(3 * a);
+      const x = cx + Math.cos(a) * r * 1.08;
+      const z = cz + Math.sin(a) * r * 0.86;
+      pts.push(new THREE.Vector3(x, 0, z));
+    }
+    return pts;
+  })(),
 };
 
 let currentTrackKey = 'classic';
