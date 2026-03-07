@@ -29,7 +29,7 @@ const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-9';
+const BUILD_VERSION = 'racing v2026.03.07-10';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -88,39 +88,32 @@ const TRACKS = {
     new THREE.Vector3(-280, 0, 260),
     new THREE.Vector3(-355, 0, 120),
   ],
-  stadium: [
-    // long straight + non-intersecting clockwise loop (no branch/cross)
-    new THREE.Vector3(-760, 0, 70),
-    new THREE.Vector3(-560, 0, 64),
-    new THREE.Vector3(-330, 0, 58),
-    new THREE.Vector3(-80, 0, 52),
-    new THREE.Vector3(180, 0, 46),
-    new THREE.Vector3(420, 0, 38),
-    new THREE.Vector3(630, 0, 18),
+  stadium: (() => {
+    // mathematically single-loop (no branch/cross), but with long straight + technical sectors
+    const pts = [];
+    const n = 40;
+    const cx = -120;
+    const cz = -20;
 
-    new THREE.Vector3(760, 0, -80),
-    new THREE.Vector3(790, 0, -240),
-    new THREE.Vector3(730, 0, -380),
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
 
-    new THREE.Vector3(560, 0, -500),
-    new THREE.Vector3(330, 0, -560),
-    new THREE.Vector3(100, 0, -585),
-    new THREE.Vector3(-140, 0, -580),
-    new THREE.Vector3(-380, 0, -545),
+      // star-shaped radial function => guaranteed one closed loop
+      let r = 520 + 170 * Math.cos(a) - 110 * Math.cos(2 * a) + 55 * Math.sin(3 * a);
 
-    new THREE.Vector3(-600, 0, -470),
-    new THREE.Vector3(-760, 0, -350),
-    new THREE.Vector3(-840, 0, -200),
+      // emulate a long main straight (flatten top sector)
+      if (a > 1.1 && a < 2.05) r += 130;
 
-    new THREE.Vector3(-850, 0, -30),
-    new THREE.Vector3(-790, 0, 130),
-    new THREE.Vector3(-670, 0, 250),
-    new THREE.Vector3(-500, 0, 335),
-    new THREE.Vector3(-300, 0, 370),
-    new THREE.Vector3(-90, 0, 345),
-    new THREE.Vector3(-250, 0, 220),
-    new THREE.Vector3(-470, 0, 130),
-  ],
+      // technical infield kinks
+      if (a > 4.2 && a < 5.0) r -= 90;
+
+      const x = cx + Math.cos(a) * r * 1.12;
+      const z = cz + Math.sin(a) * r * 0.78;
+      pts.push(new THREE.Vector3(x, 0, z));
+    }
+
+    return pts;
+  })(),
 };
 
 let currentTrackKey = 'stadium';
@@ -180,7 +173,7 @@ function buildRibbon(width, y, mat) {
 function setTrack(trackKey = 'classic') {
   currentTrackKey = TRACKS[trackKey] ? trackKey : 'classic';
   const pts = TRACKS[currentTrackKey];
-  curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.2);
+  curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.08);
   mapBounds = pts.reduce((acc, p) => ({
     minX: Math.min(acc.minX, p.x),
     maxX: Math.max(acc.maxX, p.x),
