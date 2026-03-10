@@ -40,7 +40,7 @@ const finishPanel = document.getElementById('finishPanel');
 const finishSummary = document.getElementById('finishSummary');
 const restartBtn = document.getElementById('restartBtn');
 
-const BUILD_VERSION = 'racing v2026.03.10-17';
+const BUILD_VERSION = 'racing v2026.03.10-18';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -286,6 +286,7 @@ const rivals = AI_DRIVERS.map((d, i) => {
     root,
     t: (0.95 - i * 0.045 + 1) % 1,
     speed: d.style.pace,
+    speedCurrent: d.style.pace,
     x: 0,
     z: 0,
     heading: 0,
@@ -294,6 +295,8 @@ const rivals = AI_DRIVERS.map((d, i) => {
     oz: 0,
     ovx: 0,
     ovz: 0,
+    laneOffset: 0,
+    laneTarget: 0,
     lap: 1,
     nextCp: 0,
     cpCycleReady: false,
@@ -736,6 +739,9 @@ function resetCar() {
     ai.oz = 0;
     ai.ovx = 0;
     ai.ovz = 0;
+    ai.laneOffset = 0;
+    ai.laneTarget = 0;
+    ai.speedCurrent = ai.speed;
     ai.lap = 1;
     ai.nextCp = 0;
     ai.cpCycleReady = false;
@@ -1052,24 +1058,66 @@ function tick(now) {
   state.z += state.vz * dt;
 
   rivals.forEach((ai, i) => {
-    const wiggle = Math.sin(now * 0.0011 * (0.8 + ai.style.jitter) + i * 1.7) * 0.0015 * ai.style.jitter;
-    ai.t = (ai.t + ((ai.speed + Math.sin(now * 0.001 + i) * 3) * dt) / trackLength + wiggle + 1) % 1;
+    const baseSpeed = ai.speed + Math.sin(now * 0.0009 + i * 0.7) * 2.2;
+
+    const rbNow = curve.getPointAt(ai.t);
+    const rbNow2 = curve.getPointAt((ai.t + 0.0022) % 1);
+    const tx = rbNow2.x - rbNow.x;
+    const tz = rbNow2.z - rbNow.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const dirX = tx / tl;
+    const dirZ = tz / tl;
+    const rightX = -dirZ;
+    const rightZ = dirX;
+
+    let blockAhead = false;
+    let avoidSign = (i % 2 === 0) ? 1 : -1;
+    const checkBlock = (x, z) => {
+      const dx = x - ai.x;
+      const dz = z - ai.z;
+      const along = dx * dirX + dz * dirZ;
+      const side = dx * rightX + dz * rightZ;
+      if (along > 4 && along < 28 && Math.abs(side) < 5.5) {
+        blockAhead = true;
+        avoidSign = side >= 0 ? -1 : 1;
+      }
+    };
+
+    checkBlock(state.x, state.z);
+    rivals.forEach((other) => {
+      if (other === ai) return;
+      checkBlock(other.x, other.z);
+    });
+
+    ai.laneTarget = blockAhead
+      ? avoidSign * (roadW * 0.32)
+      : Math.sin(now * 0.0007 + i * 1.8) * (roadW * 0.16);
+    ai.laneOffset += (ai.laneTarget - ai.laneOffset) * Math.min(1, dt * (2.7 + ai.style.corner * 0.7));
+
+    const targetSpeed = blockAhead ? Math.max(72, baseSpeed - 10) : baseSpeed;
+    ai.speedCurrent += (targetSpeed - ai.speedCurrent) * Math.min(1, dt * 2.8);
+    ai.speedCurrent = clamp(ai.speedCurrent, 68, 130);
+
+    const tStep = Math.max(0.00002, (ai.speedCurrent * dt) / trackLength);
+    ai.t = (ai.t + tStep) % 1;
 
     const rb = curve.getPointAt(ai.t);
     const rb2 = curve.getPointAt((ai.t + 0.0022) % 1);
     const rbx = rb2.x - rb.x;
     const rbz = rb2.z - rb.z;
     const rbl = Math.hypot(rbx, rbz) || 1;
-    const rvxBase = (rbx / rbl) * ai.speed;
-    const rvzBase = (rbz / rbl) * ai.speed;
+    const rvxBase = (rbx / rbl) * ai.speedCurrent;
+    const rvzBase = (rbz / rbl) * ai.speedCurrent;
+    const rrX = -(rbz / rbl);
+    const rrZ = (rbx / rbl);
 
     ai.ovx += (-ai.ox * (6.2 + ai.style.corner) - ai.ovx * (2.9 + ai.style.corner * 0.4)) * dt;
     ai.ovz += (-ai.oz * (6.2 + ai.style.corner) - ai.ovz * (2.9 + ai.style.corner * 0.4)) * dt;
     ai.ox += ai.ovx * dt;
     ai.oz += ai.ovz * dt;
 
-    ai.x = rb.x + ai.ox;
-    ai.z = rb.z + ai.oz;
+    ai.x = rb.x + rrX * ai.laneOffset + ai.ox;
+    ai.z = rb.z + rrZ * ai.laneOffset + ai.oz;
     ai.heading = Math.atan2(rbx, rbz);
 
     const aiCp = checkpoints[ai.nextCp];
