@@ -13,6 +13,7 @@ const nowText = document.getElementById('nowText');
 const penaltyText = document.getElementById('penaltyText');
 const damageText = document.getElementById('damageText');
 const partsText = document.getElementById('partsText');
+const tyreText = document.getElementById('tyreText');
 const slipText = document.getElementById('slipText');
 const pitText = document.getElementById('pitText');
 const buildText = document.getElementById('buildText');
@@ -40,7 +41,7 @@ const finishPanel = document.getElementById('finishPanel');
 const finishSummary = document.getElementById('finishSummary');
 const restartBtn = document.getElementById('restartBtn');
 
-const BUILD_VERSION = 'racing v2026.03.10-19';
+const BUILD_VERSION = 'racing v2026.03.10-20';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -535,6 +536,7 @@ const state = {
   slipstreamBoost: 0,
   pitStopsUsed: 0,
   canUsePitThisLap: true,
+  tireWear: 0,
 };
 
 let playerTrackT = 0;
@@ -733,6 +735,7 @@ function resetCar() {
   state.slipstreamBoost = 0;
   state.pitStopsUsed = 0;
   state.canUsePitThisLap = true;
+  state.tireWear = 0;
 
   const gateFwd = new THREE.Vector2(startDir.x, startDir.z).normalize();
   const gateDelta = new THREE.Vector2(state.x - startP.x, state.z - startP.z);
@@ -1019,13 +1022,14 @@ function tick(now) {
   const engineFactor = 1 - clamp(state.damageEngine / 170, 0, 0.5);
   const tireFactor = 1 - clamp(state.damageTire / 130, 0, 0.55);
   const aeroFactor = 1 - clamp(state.damageAero / 180, 0, 0.35);
+  const wearFactor = 1 - clamp(state.tireWear / 180, 0, 0.45);
   const damageFactor = (engineFactor * 0.5) + (tireFactor * 0.3) + (aeroFactor * 0.2);
 
   const grip = onRoad
-    ? (2.4 * currentCarStats.handling * tireFactor)
-    : (1.0 * currentCarStats.handling * 0.72 * tireFactor);
+    ? (2.4 * currentCarStats.handling * tireFactor * wearFactor)
+    : (1.0 * currentCarStats.handling * 0.72 * tireFactor * wearFactor);
 
-  const steerLimit = 0.62 * currentCarStats.handling * tireFactor * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
+  const steerLimit = 0.62 * currentCarStats.handling * tireFactor * wearFactor * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
   const steerTarget = steerIn * steerLimit;
   state.steer += (steerTarget - state.steer) * Math.min(1, dt * 7.5);
 
@@ -1209,6 +1213,7 @@ function tick(now) {
     state.damageEngine = clamp(state.damageEngine - dt * 11, 0, 100);
     state.damageTire = clamp(state.damageTire - dt * 16, 0, 100);
     state.damageAero = clamp(state.damageAero - dt * 13, 0, 100);
+    state.tireWear = clamp(state.tireWear - dt * 24, 0, 100);
     if (state.repairTimer > 1.8) {
       state.canUsePitThisLap = false;
       state.pitStopsUsed += 1;
@@ -1222,6 +1227,9 @@ function tick(now) {
   state.skidCd = Math.max(0, state.skidCd - dt);
   const slip = Math.abs(vLateral);
   const skidStrength = (brake * Math.max(0, Math.abs(vForward) - 12) * 0.028) + (slip * 0.095);
+  const cornerLoad = Math.abs(state.steer) * Math.abs(vForward) * 0.0014;
+  state.tireWear = clamp(state.tireWear + dt * (cornerLoad + skidStrength * 0.18 + (onRoad ? 0.015 : 0.07)), 0, 100);
+
   if (onRoad && skidStrength > 0.28 && state.skidCd <= 0) {
     const hw = 1.6;
     const wx1 = state.x + right.x * hw;
@@ -1341,6 +1349,7 @@ function tick(now) {
   penaltyText.textContent = `+${(state.lapPenaltyMs / 1000).toFixed(3)}s`;
   if (damageText) damageText.textContent = `${state.damage.toFixed(0)}%${state.repairTimer > 0.2 ? ' (REPAIR)' : ''}`;
   if (partsText) partsText.textContent = `ENG ${state.damageEngine.toFixed(0)} / TIR ${state.damageTire.toFixed(0)} / AERO ${state.damageAero.toFixed(0)}`;
+  if (tyreText) tyreText.textContent = `${state.tireWear.toFixed(0)}%`;
   if (slipText) slipText.textContent = state.slipstreamBoost > 0.1 ? `ON +${(state.slipstreamBoost * 100).toFixed(0)}%` : 'OFF';
   if (pitText) pitText.textContent = state.canUsePitThisLap ? `READY (${state.pitStopsUsed})` : `USED (${state.pitStopsUsed})`;
   throttleBar.style.width = `${throttle * 100}%`;
