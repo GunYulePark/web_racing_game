@@ -36,8 +36,11 @@ const btnLeft = document.getElementById('btnLeft');
 const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
+const finishPanel = document.getElementById('finishPanel');
+const finishSummary = document.getElementById('finishSummary');
+const restartBtn = document.getElementById('restartBtn');
 
-const BUILD_VERSION = 'racing v2026.03.10-16';
+const BUILD_VERSION = 'racing v2026.03.10-17';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -469,8 +472,19 @@ startRaceBtn?.addEventListener('click', () => {
   syncCarSelectors(selectedCar);
   loadCarModel(selectedCar);
   raceStarted = true;
+  raceFinished = false;
+  if (finishPanel) finishPanel.style.display = 'none';
   if (startMenu) startMenu.style.display = 'none';
   setupAudio();
+});
+
+restartBtn?.addEventListener('click', () => {
+  raceFinished = false;
+  raceStarted = false;
+  keys.clear();
+  if (finishPanel) finishPanel.style.display = 'none';
+  if (startMenu) startMenu.style.display = 'grid';
+  resetCar();
 });
 
 // skid marks
@@ -517,6 +531,7 @@ const state = {
 
 let playerTrackT = 0;
 let raceOrder = [];
+let raceFinished = false;
 
 const keys = new Set();
 addEventListener('keydown', (e) => {
@@ -888,6 +903,15 @@ function updateRaceOrder() {
   }
 }
 
+function showFinishPanel() {
+  const playerPos = raceOrder.findIndex((e) => e.isPlayer) + 1;
+  const best = state.bestLap ? fmt(state.bestLap) : '--';
+  if (finishSummary) {
+    finishSummary.textContent = `결과: P${playerPos}/${raceOrder.length}\nBEST: ${best}\nPIT STOPS: ${state.pitStopsUsed}\n\n${raceOrder.map((e, i) => `${i + 1}. ${e.name}`).join('\n')}`;
+  }
+  if (finishPanel) finishPanel.style.display = 'grid';
+}
+
 // sound (engine-like layered synth)
 let ac, oscLow, oscHigh, gainLow, gainHigh, masterGain, filter;
 async function setupAudio() {
@@ -1179,6 +1203,13 @@ function tick(now) {
     state.cpCycleReady = false;
     state.lap++;
     state.canUsePitThisLap = true;
+    if (state.lap > 7 && !raceFinished) {
+      raceFinished = true;
+      raceStarted = false;
+      keys.clear();
+      updateRaceOrder();
+      showFinishPanel();
+    }
   }
 
   state.damage = clamp((state.damageEngine * 0.4) + (state.damageTire * 0.35) + (state.damageAero * 0.25), 0, 100);

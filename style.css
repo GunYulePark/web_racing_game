@@ -65,6 +65,28 @@ canvas { display: block; }
 @media (max-width: 900px), (pointer: coarse) {
   .mobile-controls { display: flex; }
 }
+.finish-panel {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 15, 0.74);
+  display: grid;
+  place-items: center;
+  z-index: 30;
+}
+.finish-card {
+  width: min(360px, 92vw);
+  background: rgba(8,12,18,.95);
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 12px;
+  padding: 16px;
+  color: #eef4ff;
+}
+.finish-summary {
+  margin: 10px 0;
+  white-space: pre-line;
+  line-height: 1.45;
+  font-size: 13px;
+}
 .panel { position: absolute; background: rgba(8,12,18,.58); border: 1px solid rgba(255,255,255,.2); padding: 10px 12px; border-radius: 10px; min-width: 190px; backdrop-filter: blur(2px); }
 .left { left: 14px; }
 .right { right: 14px; }
