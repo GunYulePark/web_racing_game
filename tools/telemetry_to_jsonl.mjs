@@ -20,6 +20,7 @@ if (Array.isArray(raw.history)) history.push(...raw.history);
 
 const episodeRows = [];
 const segmentRows = [];
+const stepRows = [];
 
 history.forEach((episode, episodeIndex) => {
   const startedAt = episode.startedAt || null;
@@ -90,15 +91,28 @@ history.forEach((episode, episodeIndex) => {
         style: driver.style || {},
       });
     });
+
+    const steps = Array.isArray(driver.stepSamples) ? driver.stepSamples : [];
+    steps.forEach((step) => {
+      stepRows.push({
+        episodeIndex,
+        startedAt,
+        driver: driver.name,
+        style: driver.style || {},
+        ...step,
+      });
+    });
   });
 });
 
 fs.writeFileSync(`${outputPrefix}.episodes.jsonl`, episodeRows.map((row) => JSON.stringify(row)).join('\n') + (episodeRows.length ? '\n' : ''));
 fs.writeFileSync(`${outputPrefix}.segments.jsonl`, segmentRows.map((row) => JSON.stringify(row)).join('\n') + (segmentRows.length ? '\n' : ''));
+fs.writeFileSync(`${outputPrefix}.steps.jsonl`, stepRows.map((row) => JSON.stringify(row)).join('\n') + (stepRows.length ? '\n' : ''));
 
 console.log(JSON.stringify({
   input: inputPath,
   episodes: episodeRows.length,
   segments: segmentRows.length,
-  outputs: [`${outputPrefix}.episodes.jsonl`, `${outputPrefix}.segments.jsonl`],
+  steps: stepRows.length,
+  outputs: [`${outputPrefix}.episodes.jsonl`, `${outputPrefix}.segments.jsonl`, `${outputPrefix}.steps.jsonl`],
 }, null, 2));

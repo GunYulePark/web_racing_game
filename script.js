@@ -3,6 +3,7 @@ import { GLTFLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/GL
 import { DRACOLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/DRACOLoader.js';
 import { FBXLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/FBXLoader.js';
 import { TRACKS, computeTrackBounds, createCheckpoints, sampleClosedCurveFrame, nearestPointOnCurve } from './track.js';
+import { installBrowserBenchmarkHooks } from './tools/browser_benchmark.js';
 
 const speedText = document.getElementById('speedText');
 const gearText = document.getElementById('gearText');
@@ -255,6 +256,7 @@ const rivals = AI_DRIVERS.map((d, i) => {
     lastProgress: 0,
     recovery: 0,
     stability: 1,
+    lastContactTelemetry: 0,
     style: d.style,
   };
 });
@@ -489,10 +491,12 @@ const state = {
 };
 
 const aiTelemetry = {
+  telemetryVersion: 2,
   episodes: [],
   current: null,
   maxEpisodes: 24,
   sampleEveryMs: 220,
+  maxStepSamplesPerDriver: 6000,
   lastSampleAt: 0,
 };
 
@@ -733,6 +737,7 @@ function resetCar() {
     ai.lastProgress = 0;
     ai.recovery = 0;
     ai.stability = 1;
+    ai.lastContactTelemetry = 0;
     const rp = curve.getPointAt(ai.t);
     const rp2 = curve.getPointAt((ai.t + 0.002) % 1);
     ai.x = rp.x;
@@ -755,6 +760,7 @@ if (trackSelect) trackSelect.value = 'stadium';
 drawCarPreview();
 drawTrackPreview();
 setTrack('stadium');
+installBrowserBenchmarkHooks({ buildVersion: BUILD_VERSION });
 
 function spawnSkidMark(x, z, heading, alpha = 0.25) {
   const m = new THREE.Mesh(
@@ -847,13 +853,57 @@ function trackTAt(x, z, samples = 260, aroundT = null, window = 0.12) {
   return nearestTrackSample(x, z, samples, aroundT, window).t;
 }
 
+function buildTelemetryObservation(ai, progress) {
+  const nearest = nearestTrackSample(ai.x, ai.z, 220, ai.t, 0.12);
+  const headingTrack = Math.atan2(nearest.tangent.x, nearest.tangent.y);
+  const headingErr = angleDiff(ai.heading, headingTrack);
+  const speed = Math.hypot(ai.vx, ai.vz);
+  const fwd = new THREE.Vector2(Math.sin(ai.heading), Math.cos(ai.heading));
+  const right = new THREE.Vector2(fwd.y, -fwd.x);
+  const lateralSpeed = ai.vx * right.x + ai.vz * right.y;
+  const slipAngle = Math.atan2(lateralSpeed, Math.max(1, Math.abs(speed)));
+  const offroadMargin = (Math.abs(nearest.signedOffset) - roadW * 0.5) / Math.max(1, roadW * 0.5);
+  const future = [0.01, 0.025, 0.05, 0.085, 0.12].map((delta) => {
+    const frame = sampleTrackFrame(nearest.t + delta);
+    const futureHeading = Math.atan2(frame.tangentX, frame.tangentZ);
+    return angleDiff(futureHeading, headingTrack);
+  });
+  return {
+    obs: [
+      speed / 180,
+      lateralSpeed / 30,
+      ai.yawRate / 2.5,
+      ai.steer,
+      ai.throttleCmd || 0,
+      ai.brakePedal,
+      nearest.signedOffset / Math.max(1, roadW * 0.5),
+      headingErr / Math.PI,
+      slipAngle / 1.2,
+      offroadMargin,
+      ...future,
+      Math.sin(ai.heading),
+      Math.cos(ai.heading),
+      nearest.t,
+      progress - Math.floor(progress),
+      clamp((performance.now() - state.lapStart) / 120000, 0, 1),
+      Math.abs(nearest.signedOffset) > (roadW * 0.5) ? 1 : 0,
+    ].map((value) => clamp(value, -5, 5)),
+    speed,
+    headingErr,
+    slipAngle,
+    offroadMargin,
+  };
+}
+
 function beginAITelemetrySession() {
   aiTelemetry.current = {
+    version: aiTelemetry.telemetryVersion,
     startedAt: Date.now(),
     laps: [],
     drivers: rivals.map((ai) => ({
       name: ai.name,
       style: { ...ai.style },
+      stepSamples: [],
       segments: Array.from({ length: checkpoints.length || 8 }, (_, idx) => ({
         idx,
         reward: 0,
@@ -875,6 +925,7 @@ function beginAITelemetrySession() {
 function saveAITelemetrySnapshot(reason = 'manual') {
   if (!aiTelemetry.current) return null;
   const payload = {
+    version: aiTelemetry.telemetryVersion,
     reason,
     savedAt: new Date().toISOString(),
     current: aiTelemetry.current,
@@ -928,6 +979,26 @@ function sampleAIRLStep(now) {
     seg.stabilityLoss += Math.max(0, 1 - ai.stability);
     seg.progressDelta += progressDelta;
     if (offroad) seg.offroad += 1;
+
+    const { obs, headingErr, slipAngle, offroadMargin } = buildTelemetryObservation(ai, progress);
+    entry.stepSamples.push({
+      tMs: Math.round(now),
+      lap: ai.lap,
+      segIdx,
+      obs,
+      action: [clamp(ai.steer / 0.62, -1, 1), clamp(ai.throttleCmd || 0, 0, 1), clamp(ai.brakePedal, 0, 1), clamp(ai.driftAmount, 0, 1)],
+      reward,
+      progress,
+      progressDelta,
+      speed,
+      headingErr,
+      slipAngle,
+      stability: ai.stability,
+      offroadMargin,
+      offroad: offroad ? 1 : 0,
+      contact: ai.lastContactTelemetry,
+    });
+    if (entry.stepSamples.length > aiTelemetry.maxStepSamplesPerDriver) entry.stepSamples.shift();
   });
 }
 
@@ -1122,6 +1193,7 @@ function tick(now) {
   state.z += state.vz * dt;
 
   rivals.forEach((ai, i) => {
+    ai.lastContactTelemetry = 0;
     const aiFwd = new THREE.Vector2(Math.sin(ai.heading), Math.cos(ai.heading));
     const aiRight = new THREE.Vector2(aiFwd.y, -aiFwd.x);
     let aiVForward = ai.vx * aiFwd.x + ai.vz * aiFwd.y;
@@ -1321,6 +1393,7 @@ function tick(now) {
         const telemetryDriver = aiTelemetry.current?.drivers?.[i];
         const telemetrySeg = telemetryDriver?.segments?.[ai.nextCp % telemetryDriver.segments.length];
         if (telemetrySeg) telemetrySeg.contact += 1;
+        ai.lastContactTelemetry = 1;
         state.yawRate += (Math.random() - 0.5) * 0.18;
         const impact = Math.abs(relN) * 0.2;
         state.damageEngine = clamp(state.damageEngine + impact * 0.45, 0, 100);

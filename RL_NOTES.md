@@ -29,7 +29,22 @@ Telemetry is also stored in localStorage under:
 Offline conversion helper:
 
 - `node tools/telemetry_to_jsonl.mjs ./telemetry.json`
-- writes `*.episodes.jsonl` and `*.segments.jsonl` for imitation/offline RL analysis
+- writes `*.episodes.jsonl`, `*.segments.jsonl`, and `*.steps.jsonl`
+- `*.steps.jsonl` is the behavior-cloning bootstrap source with `obs` + `action` pairs
+
+Behavior-cloning bootstrap:
+
+- `python rl/build_bc_dataset.py ./telemetry.steps.jsonl`
+- creates `bc_dataset.npz` + `manifest.json`
+- `python rl/train_bc.py ./.../bc_dataset.npz`
+- `python rl/export_policy.py ./.../bc_policy.pt`
+- exported JSON can be evaluated in-browser later via `tools/policy_inference.js`
+
+Deterministic browser benchmark harness:
+
+- open the game and run `window.runDeterministicAIBenchmark({ track: 'stadium', laps: 1, seed: 42 })`
+- repeat with the same seed to verify deterministic metrics
+- download JSON via `window.downloadDeterministicAIBenchmark(...)`
 
 ## Recommended RL path
 

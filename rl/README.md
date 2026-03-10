@@ -8,7 +8,12 @@ This folder is the first real step from scripted racing AI to reinforcement lear
 - `track_geometry.py` — reusable projection / nearest-point helpers for closed racing lines
 - `racing_env.py` — Gymnasium-compatible continuous-control racing environment
 - `train_ppo.py` — PPO training entrypoint using Stable-Baselines3
-- `evaluate_env.py` — quick heuristic-vs-random sanity check runner
+- `evaluate_env.py` — quick heuristic / random / exported-policy sanity check runner
+- `build_bc_dataset.py` — converts `*.steps.jsonl` into a train/val cloning dataset
+- `train_bc.py` — trains a small MLP behavior-cloning policy
+- `export_policy.py` — exports that policy to browser-friendly JSON
+- `bc_model.py` — shared PyTorch policy definition + exporter
+- `policies.py` — shared heuristic + dense JSON policy evaluator
 - `test_env.py` — lightweight regression checks for geometry + env API
 - `requirements.txt` — Python dependencies
 
@@ -71,9 +76,19 @@ python train_ppo.py
 
 ```bash
 python evaluate_env.py --track stadium --episodes 5
+python evaluate_env.py --track stadium --policy-json ./runs/bc_policy.policy.json
 ```
 
-### 4. Evaluate manually
+### 4. Build a behavior-cloning dataset from browser telemetry
+
+```bash
+node ../tools/telemetry_to_jsonl.mjs ../telemetry.json
+python build_bc_dataset.py ../telemetry.steps.jsonl
+python train_bc.py ../telemetry.steps_dataset/bc_dataset.npz
+python export_policy.py ../telemetry.steps_dataset/bc_runs/bc_policy.pt
+```
+
+### 5. Evaluate manually
 
 Open a Python shell and run:
 
