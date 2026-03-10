@@ -2,6 +2,7 @@ import * as THREE from 'https://esm.sh/three@0.164.1';
 import { GLTFLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/DRACOLoader.js';
 import { FBXLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/FBXLoader.js';
+import { TRACKS, computeTrackBounds, createCheckpoints, sampleClosedCurveFrame, nearestPointOnCurve } from './track.js';
 
 const speedText = document.getElementById('speedText');
 const gearText = document.getElementById('gearText');
@@ -41,7 +42,7 @@ const finishPanel = document.getElementById('finishPanel');
 const finishSummary = document.getElementById('finishSummary');
 const restartBtn = document.getElementById('restartBtn');
 
-const BUILD_VERSION = 'racing v2026.03.10-20';
+const BUILD_VERSION = 'racing v2026.03.11-02';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -81,61 +82,6 @@ const ground = new THREE.Mesh(
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
-function makeProceduralTrack({ n = 40, cx = 0, cz = 0, sx = 1, sz = 1, f }) {
-  const pts = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const r = f(a);
-    pts.push(new THREE.Vector3(cx + Math.cos(a) * r * sx, 0, cz + Math.sin(a) * r * sz));
-  }
-  return pts;
-}
-
-const TRACKS = {
-  classic: [
-    new THREE.Vector3(-320, 0, -40),
-    new THREE.Vector3(-250, 0, -190),
-    new THREE.Vector3(-40, 0, -250),
-    new THREE.Vector3(180, 0, -200),
-    new THREE.Vector3(315, 0, -70),
-    new THREE.Vector3(320, 0, 70),
-    new THREE.Vector3(210, 0, 145),
-    new THREE.Vector3(45, 0, 155),
-    new THREE.Vector3(-60, 0, 105),
-    new THREE.Vector3(10, 0, 20),
-    new THREE.Vector3(180, 0, 40),
-    new THREE.Vector3(260, 0, 190),
-    new THREE.Vector3(120, 0, 300),
-    new THREE.Vector3(-90, 0, 315),
-    new THREE.Vector3(-280, 0, 260),
-    new THREE.Vector3(-355, 0, 120),
-  ],
-  stadium: makeProceduralTrack({
-    n: 40, cx: -120, cz: -20, sx: 1.12, sz: 0.78,
-    f: (a) => {
-      let r = 520 + 170 * Math.cos(a) - 110 * Math.cos(2 * a) + 55 * Math.sin(3 * a);
-      if (a > 1.1 && a < 2.05) r += 130;
-      if (a > 4.2 && a < 5.0) r -= 90;
-      return r;
-    }
-  }),
-  coastal: makeProceduralTrack({
-    n: 42, cx: 0, cz: 20, sx: 1.08, sz: 0.82,
-    f: (a) => 500 + 135 * Math.sin(a + 0.35) + 95 * Math.cos(2.6 * a) + 40 * Math.sin(4.2 * a),
-  }),
-  canyon: makeProceduralTrack({
-    n: 38, cx: -40, cz: 0, sx: 1.0, sz: 0.86,
-    f: (a) => {
-      let r = 470 + 190 * Math.cos(a * 1.1) - 75 * Math.sin(a * 2.8);
-      if (a > 2.0 && a < 3.15) r -= 120;
-      return r;
-    }
-  }),
-  nightcity: makeProceduralTrack({
-    n: 44, cx: -20, cz: -10, sx: 1.05, sz: 0.8,
-    f: (a) => 510 + 110 * Math.cos(3 * a) + 80 * Math.sin(2 * a + 0.8),
-  }),
-};
 
 let currentTrackKey = 'stadium';
 let curve = null;
@@ -199,12 +145,7 @@ function setTrack(trackKey = 'classic') {
   const pts = TRACKS[currentTrackKey];
   curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.08);
   trackLength = Math.max(1, curve.getLength());
-  mapBounds = pts.reduce((acc, p) => ({
-    minX: Math.min(acc.minX, p.x),
-    maxX: Math.max(acc.maxX, p.x),
-    minZ: Math.min(acc.minZ, p.z),
-    maxZ: Math.max(acc.maxZ, p.z),
-  }), { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity });
+  mapBounds = computeTrackBounds(pts);
 
   if (curbMesh) scene.remove(curbMesh);
   if (roadMesh) scene.remove(roadMesh);
@@ -237,7 +178,7 @@ function setTrack(trackKey = 'classic') {
   pitZoneMesh.position.set(pitZoneCenter.x, 0.74, pitZoneCenter.z);
   scene.add(pitZoneMesh);
 
-  checkpoints = Array.from({ length: 8 }, (_, i) => curve.getPointAt(i / 8));
+  checkpoints = createCheckpoints(curve, 8);
   drawTrackPreview();
   resetCar();
 }
@@ -255,11 +196,11 @@ fallback.position.y = 1.4;
 carRoot.add(fallback);
 
 const AI_DRIVERS = [
-  { name: 'NOVA', color: '#ff8b7a', style: { pace: 98, corner: 0.85, jitter: 0.6 } },
-  { name: 'RUNE', color: '#7ab6ff', style: { pace: 96, corner: 1.2, jitter: 0.35 } },
-  { name: 'ECHO', color: '#9bff96', style: { pace: 94, corner: 0.95, jitter: 0.9 } },
-  { name: 'BLITZ', color: '#ffd86b', style: { pace: 101, corner: 0.75, jitter: 0.5 } },
-  { name: 'MIRA', color: '#d69bff', style: { pace: 95, corner: 1.05, jitter: 0.4 } },
+  { name: 'NOVA', color: '#ff8b7a', style: { pace: 98, corner: 0.85, jitter: 0.28, bravery: 1.04, drift: 1.08 } },
+  { name: 'RUNE', color: '#7ab6ff', style: { pace: 96, corner: 1.2, jitter: 0.18, bravery: 0.98, drift: 0.9 } },
+  { name: 'ECHO', color: '#9bff96', style: { pace: 94, corner: 0.95, jitter: 0.24, bravery: 0.95, drift: 0.96 } },
+  { name: 'BLITZ', color: '#ffd86b', style: { pace: 101, corner: 0.75, jitter: 0.22, bravery: 1.08, drift: 1.14 } },
+  { name: 'MIRA', color: '#d69bff', style: { pace: 95, corner: 1.05, jitter: 0.16, bravery: 1.0, drift: 0.98 } },
 ];
 
 function createAICar(color) {
@@ -299,6 +240,7 @@ const rivals = AI_DRIVERS.map((d, i) => {
     laneOffset: 0,
     laneTarget: 0,
     steer: 0,
+    throttleCmd: 0,
     vx: 0,
     vz: 0,
     yawRate: 0,
@@ -306,6 +248,13 @@ const rivals = AI_DRIVERS.map((d, i) => {
     lap: 1,
     nextCp: 0,
     cpCycleReady: false,
+    learn: Array.from({ length: 8 }, () => ({ attack: 1, samples: 0, mistakes: 0 })),
+    lastLearnIdx: 0,
+    driftAmount: 0,
+    trackError: 0,
+    lastProgress: 0,
+    recovery: 0,
+    stability: 1,
     style: d.style,
   };
 });
@@ -539,6 +488,14 @@ const state = {
   tireWear: 0,
 };
 
+const aiTelemetry = {
+  episodes: [],
+  current: null,
+  maxEpisodes: 24,
+  sampleEveryMs: 220,
+  lastSampleAt: 0,
+};
+
 let playerTrackT = 0;
 let raceOrder = [];
 let raceFinished = false;
@@ -590,6 +547,16 @@ bindHoldButton(btnAccel, 'w');
 
 function fmt(ms) { return `${(ms / 1000).toFixed(3)}s`; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function angleDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+function sampleTrackFrame(t) {
+  return sampleClosedCurveFrame(curve, t);
+}
 
 function mapToMini(x, z) {
   const pad = 14;
@@ -751,6 +718,7 @@ function resetCar() {
     ai.laneTarget = 0;
     ai.speedCurrent = ai.speed;
     ai.steer = 0;
+    ai.throttleCmd = 0;
     ai.vx = 0;
     ai.vz = 0;
     ai.yawRate = 0;
@@ -758,6 +726,13 @@ function resetCar() {
     ai.lap = 1;
     ai.nextCp = 0;
     ai.cpCycleReady = false;
+    ai.learn = Array.from({ length: checkpoints.length }, () => ({ attack: 1, samples: 0, mistakes: 0 }));
+    ai.lastLearnIdx = 0;
+    ai.driftAmount = 0;
+    ai.trackError = 0;
+    ai.lastProgress = 0;
+    ai.recovery = 0;
+    ai.stability = 1;
     const rp = curve.getPointAt(ai.t);
     const rp2 = curve.getPointAt((ai.t + 0.002) % 1);
     ai.x = rp.x;
@@ -765,6 +740,7 @@ function resetCar() {
     ai.heading = Math.atan2(rp2.x - rp.x, rp2.z - rp.z);
   });
   raceOrder = [];
+  beginAITelemetrySession();
 
   // clear skid marks + smoke
   skidMarks.length = 0;
@@ -851,50 +827,124 @@ function updateSmoke(dt) {
   }
 }
 
-function nearestTrackSample(x, z, samples = 180) {
-  let min = Infinity;
-  let bestP = null;
-  let bestRight = null;
+function nearestTrackSample(x, z, samples = 180, aroundT = null, window = 0.12) {
+  const hit = nearestPointOnCurve(curve, x, z, { samples, aroundT, window });
+  return {
+    t: hit.t,
+    distSq: hit.distSq,
+    point: hit.frame.p,
+    right: new THREE.Vector2(hit.frame.rightX, hit.frame.rightZ),
+    tangent: new THREE.Vector2(hit.frame.tangentX, hit.frame.tangentZ),
+    signedOffset: hit.signedOffset,
+  };
+}
 
-  for (let i = 0; i < samples; i++) {
-    const t = i / samples;
-    const p = curve.getPointAt(t);
-    const p2 = curve.getPointAt((t + 1 / samples) % 1);
-    const dir = new THREE.Vector3().subVectors(p2, p).normalize();
-    const right = new THREE.Vector2(-dir.z, dir.x).normalize();
-    const dx = x - p.x;
-    const dz = z - p.z;
-    const d = dx * dx + dz * dz;
-    if (d < min) {
-      min = d;
-      bestP = p;
-      bestRight = right;
-    }
+function roadDistanceSq(x, z, aroundT = null) {
+  return nearestTrackSample(x, z, 180, aroundT).distSq;
+}
+
+function trackTAt(x, z, samples = 260, aroundT = null, window = 0.12) {
+  return nearestTrackSample(x, z, samples, aroundT, window).t;
+}
+
+function beginAITelemetrySession() {
+  aiTelemetry.current = {
+    startedAt: Date.now(),
+    laps: [],
+    drivers: rivals.map((ai) => ({
+      name: ai.name,
+      style: { ...ai.style },
+      segments: Array.from({ length: checkpoints.length || 8 }, (_, idx) => ({
+        idx,
+        reward: 0,
+        samples: 0,
+        speedSum: 0,
+        throttleSum: 0,
+        brakeSum: 0,
+        driftSum: 0,
+        stabilityLoss: 0,
+        progressDelta: 0,
+        offroad: 0,
+        contact: 0,
+      })),
+    })),
+  };
+  aiTelemetry.lastSampleAt = 0;
+}
+
+function saveAITelemetrySnapshot(reason = 'manual') {
+  if (!aiTelemetry.current) return null;
+  const payload = {
+    reason,
+    savedAt: new Date().toISOString(),
+    current: aiTelemetry.current,
+    history: aiTelemetry.episodes,
+  };
+  try {
+    localStorage.setItem('racingAIDebugTelemetry', JSON.stringify(payload));
+  } catch (err) {
+    console.warn('telemetry save failed', err);
   }
-
-  return { distSq: min, point: bestP, right: bestRight };
+  return payload;
 }
 
-function roadDistanceSq(x, z) {
-  return nearestTrackSample(x, z).distSq;
+function finalizeAITelemetrySession(reason = 'finished') {
+  if (!aiTelemetry.current) return;
+  const snapshot = saveAITelemetrySnapshot(reason);
+  aiTelemetry.episodes.unshift(snapshot.current);
+  aiTelemetry.episodes = aiTelemetry.episodes.slice(0, aiTelemetry.maxEpisodes);
+  saveAITelemetrySnapshot(`${reason}-history`);
 }
 
-function trackTAt(x, z, samples = 260) {
-  let bestT = 0;
-  let min = Infinity;
-  for (let i = 0; i < samples; i++) {
-    const t = i / samples;
-    const p = curve.getPointAt(t);
-    const dx = x - p.x;
-    const dz = z - p.z;
-    const d = dx * dx + dz * dz;
-    if (d < min) {
-      min = d;
-      bestT = t;
-    }
-  }
-  return bestT;
+function sampleAIRLStep(now) {
+  if (!raceStarted || !aiTelemetry.current || (now - aiTelemetry.lastSampleAt) < aiTelemetry.sampleEveryMs) return;
+  aiTelemetry.lastSampleAt = now;
+  rivals.forEach((ai, idx) => {
+    const entry = aiTelemetry.current.drivers[idx];
+    if (!entry) return;
+    const segIdx = ai.nextCp % entry.segments.length;
+    const seg = entry.segments[segIdx];
+    const speed = Math.hypot(ai.vx, ai.vz);
+    const offroad = roadDistanceSq(ai.x, ai.z, ai.t) > (roadW * roadW * 0.32);
+    const progress = lapProgress(ai.lap, ai.nextCp, ai.t);
+    const progressDelta = Math.max(0, progress - (ai.lastProgress || 0));
+    ai.lastProgress = progress;
+    const reward = (
+      speed * 0.028
+      + progressDelta * 26
+      - Math.abs(ai.trackError) * 0.12
+      - Math.abs(ai.steer) * 0.58
+      - ai.brakePedal * 1.4
+      - (1 - ai.stability) * 1.8
+      - (offroad ? 3.2 : 0)
+      - ai.driftAmount * 0.38
+    );
+    seg.reward += reward;
+    seg.samples += 1;
+    seg.speedSum += speed;
+    seg.throttleSum += ai.throttleCmd || 0;
+    seg.brakeSum += ai.brakePedal;
+    seg.driftSum += ai.driftAmount;
+    seg.stabilityLoss += Math.max(0, 1 - ai.stability);
+    seg.progressDelta += progressDelta;
+    if (offroad) seg.offroad += 1;
+  });
 }
+
+window.dumpRacingAITelemetry = () => saveAITelemetrySnapshot('window-dump');
+window.getRacingAITelemetry = () => ({ ...aiTelemetry, current: aiTelemetry.current, historySize: aiTelemetry.episodes.length });
+window.downloadRacingAITelemetry = () => {
+  const payload = saveAITelemetrySnapshot('window-download');
+  if (!payload) return null;
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `racing-ai-telemetry-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  return payload;
+};
 
 function lapProgress(lap, nextCp, t) {
   const cpFrac = clamp(nextCp / checkpoints.length, 0, 1);
@@ -1077,40 +1127,70 @@ function tick(now) {
     let aiVForward = ai.vx * aiFwd.x + ai.vz * aiFwd.y;
     let aiVLateral = ai.vx * aiRight.x + ai.vz * aiRight.y;
 
-    const lookT = (ai.t + 0.016 + clamp(Math.abs(aiVForward) / 2200, 0.005, 0.03)) % 1;
-    const lookP = curve.getPointAt(lookT);
-    const lookP2 = curve.getPointAt((lookT + 0.0022) % 1);
-    const ldx = lookP2.x - lookP.x;
-    const ldz = lookP2.z - lookP.z;
-    const llen = Math.hypot(ldx, ldz) || 1;
-    const lineRightX = -(ldz / llen);
-    const lineRightZ = (ldx / llen);
+    const speedNorm = clamp(Math.abs(aiVForward) / 180, 0, 1);
+    const lookBase = 0.012 + speedNorm * 0.028;
+    const frameNear = sampleTrackFrame(ai.t);
+    const frameMid = sampleTrackFrame((ai.t + lookBase) % 1);
+    const frameFar = sampleTrackFrame((ai.t + lookBase * 2.1) % 1);
+    const headingNear = Math.atan2(frameNear.tangentX, frameNear.tangentZ);
+    const headingMid = Math.atan2(frameMid.tangentX, frameMid.tangentZ);
+    const headingFar = Math.atan2(frameFar.tangentX, frameFar.tangentZ);
+    const cornerNow = Math.abs(angleDiff(headingMid, headingNear));
+    const cornerAhead = Math.abs(angleDiff(headingFar, headingNear));
+    const cornerNeed = Math.max(cornerNow * 0.7 + cornerAhead * 1.15, 0);
+    const cornerSign = Math.sign(frameNear.tangentX * frameFar.tangentZ - frameNear.tangentZ * frameFar.tangentX) || 1;
+    const segmentIdx = ai.nextCp % checkpoints.length;
+    const learn = ai.learn[segmentIdx] || { attack: 1, samples: 0, mistakes: 0 };
+    const attack = clamp(learn.attack * ai.style.bravery, 0.82, 1.18);
+
+    const nearest = nearestTrackSample(ai.x, ai.z, 180, ai.t, 0.14);
+    const signedTrackErr = nearest.signedOffset;
+    ai.trackError = signedTrackErr;
 
     let blockAhead = false;
-    let avoidSign = (i % 2 === 0) ? 1 : -1;
-    const checkBlock = (x, z) => {
+    let avoidBias = 0;
+    let crowding = 0;
+    let closingSpeed = 0;
+    const checkTraffic = (x, z, vx = 0, vz = 0, weight = 1) => {
       const dx = x - ai.x;
       const dz = z - ai.z;
       const along = dx * aiFwd.x + dz * aiFwd.y;
       const side = dx * aiRight.x + dz * aiRight.y;
-      if (along > 4 && along < 24 && Math.abs(side) < 6.5) {
+      const nearAhead = along > 1 && along < lerp(20, 34, speedNorm);
+      const sideWindow = lerp(6.2, 8.6, Math.min(1, Math.abs(along) / 34));
+      if (nearAhead && Math.abs(side) < sideWindow) {
         blockAhead = true;
-        avoidSign = side >= 0 ? -1 : 1;
+        const sideDir = Math.abs(side) > 0.35 ? -Math.sign(side) : (signedTrackErr >= 0 ? -1 : 1);
+        const urgency = (1 - along / Math.max(1, lerp(20, 34, speedNorm))) * weight;
+        avoidBias += sideDir * urgency;
+        closingSpeed = Math.max(closingSpeed, (ai.vx - vx) * aiFwd.x + (ai.vz - vz) * aiFwd.y);
+      }
+      const dist = Math.hypot(dx, dz) || 1;
+      if (dist < 18) {
+        crowding += (1 - dist / 18) * weight;
+        avoidBias += (-side / dist) * 0.55 * weight;
       }
     };
-    checkBlock(state.x, state.z);
+    checkTraffic(state.x, state.z, state.vx, state.vz, 1.2);
     rivals.forEach((other) => {
       if (other === ai) return;
-      checkBlock(other.x, other.z);
+      checkTraffic(other.x, other.z, other.vx, other.vz, 1);
     });
+    avoidBias = clamp(avoidBias, -1.25, 1.25);
 
-    ai.laneTarget = blockAhead
-      ? avoidSign * (roadW * 0.34)
-      : Math.sin(now * 0.00055 + i * 1.6) * (roadW * 0.14);
-    ai.laneOffset += (ai.laneTarget - ai.laneOffset) * Math.min(1, dt * 2.9);
+    const apexOffset = clamp(cornerNeed * roadW * 0.62, 0, roadW * 0.28) * -cornerSign;
+    const exitOffset = clamp(cornerNeed * roadW * 0.5, 0, roadW * 0.24) * cornerSign;
+    const racingLineOffset = lerp(apexOffset, exitOffset, 0.38 + speedNorm * 0.28);
+    const jitterScale = (1 - clamp(cornerNeed * 1.1 + crowding * 0.9, 0, 0.82));
+    const jitter = Math.sin(now * 0.00018 * (0.85 + ai.style.jitter) + i * 1.17) * (roadW * 0.025 * ai.style.jitter * jitterScale);
+    const avoidOffset = blockAhead ? avoidBias * (roadW * 0.22) : 0;
+    const recoveryNeed = clamp((Math.abs(signedTrackErr) / (roadW * 0.42)) + Math.abs(aiVLateral) / 18 + Math.abs(ai.yawRate) / 3.4 - 0.8, 0, 1.2);
+    ai.recovery += (recoveryNeed - ai.recovery) * Math.min(1, dt * (recoveryNeed > ai.recovery ? 3.6 : 1.8));
+    ai.laneTarget = clamp(racingLineOffset + avoidOffset + jitter - signedTrackErr * ai.recovery * 0.42, -(roadW * 0.3), roadW * 0.3);
+    ai.laneOffset += (ai.laneTarget - ai.laneOffset) * Math.min(1, dt * (blockAhead ? 4.8 : 2.7));
 
-    const targetX = lookP.x + lineRightX * ai.laneOffset;
-    const targetZ = lookP.z + lineRightZ * ai.laneOffset;
+    const targetX = frameMid.p.x + frameMid.rightX * ai.laneOffset;
+    const targetZ = frameMid.p.z + frameMid.rightZ * ai.laneOffset;
     const toTX = targetX - ai.x;
     const toTZ = targetZ - ai.z;
     const toTL = Math.hypot(toTX, toTZ) || 1;
@@ -1121,26 +1201,50 @@ function tick(now) {
     const dot = clamp(aiFwd.x * desiredX + aiFwd.y * desiredZ, -1, 1);
     const headingErr = Math.atan2(cross, dot);
 
-    const cornerNeed = Math.abs(headingErr);
-    const throttleTarget = blockAhead ? 0.72 : clamp(1 - cornerNeed * 1.35, 0.38, 1);
-    const brakeTargetAI = cornerNeed > 0.42 ? clamp((cornerNeed - 0.42) * 2.6, 0, 1) : 0;
+    const linePenalty = clamp(Math.abs(signedTrackErr) / (roadW * 0.36), 0, 1.1);
+    const trafficPenalty = blockAhead ? (0.12 + crowding * 0.26 + clamp(closingSpeed / 42, 0, 0.4)) : crowding * 0.16;
+    const risk = clamp(cornerNeed * 1.05 + linePenalty * 0.6 + trafficPenalty + ai.recovery * 0.75, 0, 2.4);
+    const baseCornerSpeed = 194 - cornerNeed * 126 - linePenalty * 16 - trafficPenalty * 22;
+    const targetSpeed = clamp(baseCornerSpeed * attack * ai.style.corner * (1 - ai.recovery * 0.18), 66, currentCarStats.topSpeed / 1.09);
+    const speedError = aiVForward - targetSpeed;
+    const driftWindow = cornerNeed > 0.24 && aiVForward > targetSpeed * (0.94 - ai.recovery * 0.08) && ai.recovery < 0.58;
+    const desiredDrift = driftWindow
+      ? clamp((cornerNeed - 0.22) * 1.8 + Math.max(0, speedError) / 92 - crowding * 0.55, 0, 1) * ai.style.drift * (1 - ai.recovery * 0.72)
+      : 0;
+    ai.driftAmount += (desiredDrift - ai.driftAmount) * Math.min(1, dt * (desiredDrift > ai.driftAmount ? 3.3 : 2.8));
 
-    ai.brakePedal += (brakeTargetAI - ai.brakePedal) * Math.min(1, dt * (brakeTargetAI > ai.brakePedal ? 5 : 3));
-    ai.steer += (clamp(-headingErr * 1.9, -0.72, 0.72) - ai.steer) * Math.min(1, dt * 6.8);
+    const throttleTarget = blockAhead
+      ? clamp((targetSpeed - 12 - closingSpeed * 0.3) / Math.max(1, currentCarStats.topSpeed), 0.18, 0.76)
+      : clamp((targetSpeed - Math.max(0, speedError) * 0.32) / Math.max(1, currentCarStats.topSpeed * 0.96), 0.18, 1);
+    ai.throttleCmd = clamp(throttleTarget * (1 - ai.recovery * 0.38), 0.12, 1);
+    const brakeTargetAI = speedError > 5
+      ? clamp(speedError / 50 + risk * 0.22 + clamp(closingSpeed / 35, 0, 0.32), 0, 1)
+      : clamp((risk - 0.55) * 0.55, 0, 0.42);
 
-    const aiGrip = 2.4 * currentCarStats.handling;
-    let aiALong = currentCarStats.accel * throttleTarget;
+    ai.brakePedal += (brakeTargetAI - ai.brakePedal) * Math.min(1, dt * (brakeTargetAI > ai.brakePedal ? 5.8 : 3.4));
+    const steerAssist = ai.driftAmount * cornerSign * 0.2;
+    const steerGain = 1.42 + cornerNeed * 0.48 + ai.recovery * 0.24;
+    const steerDamping = clamp(aiVLateral / 28, -0.28, 0.28);
+    const steerTargetAI = clamp(-headingErr * steerGain - steerDamping - signedTrackErr / (roadW * 0.9) + steerAssist, -0.62, 0.62);
+    ai.steer += (steerTargetAI - ai.steer) * Math.min(1, dt * (5.1 + ai.recovery * 0.8));
+
+    const aiGrip = (2.95 - ai.driftAmount * 1.3 - ai.recovery * 0.18) * currentCarStats.handling;
+    let aiALong = currentCarStats.accel * ai.throttleCmd;
     aiALong -= currentCarStats.brake * ai.brakePedal * Math.sign(aiVForward || 1);
-    aiALong -= 1.05 * aiVForward;
-    aiALong -= 0.0048 * aiVForward * Math.abs(aiVForward);
+    aiALong -= 0.98 * aiVForward;
+    aiALong -= 0.0043 * aiVForward * Math.abs(aiVForward);
+    if (Math.abs(signedTrackErr) > roadW * 0.52) aiALong -= 16 * Math.sign(aiVForward || 1);
 
+    const desiredLat = clamp(-headingErr * Math.abs(aiVForward) * 0.24, -24, 24) * (0.58 + ai.driftAmount * 0.82);
+    aiVLateral += (desiredLat - aiVLateral) * Math.min(1, dt * (2.1 + ai.driftAmount * 0.9 + ai.recovery * 0.6));
     aiVForward += aiALong * dt;
-    aiVForward = clamp(aiVForward, 0, currentCarStats.topSpeed / 1.18);
+    aiVForward = clamp(aiVForward, 0, currentCarStats.topSpeed / 1.12);
     aiVLateral *= Math.exp(-aiGrip * dt);
 
-    const aiTargetYaw = aiVForward > 0.5 ? (aiVForward / 3.4) * Math.tan(ai.steer) : 0;
-    ai.yawRate += (aiTargetYaw - ai.yawRate) * Math.min(1, dt * 5.2);
-    ai.yawRate *= Math.exp(-1.5 * dt);
+    const yawLead = ai.driftAmount * cornerSign * clamp(Math.abs(aiVLateral) / 28, 0, 0.26);
+    const aiTargetYaw = aiVForward > 0.5 ? (aiVForward / 3.55) * Math.tan(ai.steer + yawLead) : 0;
+    ai.yawRate += (aiTargetYaw - ai.yawRate) * Math.min(1, dt * (4.8 + ai.driftAmount * 0.55));
+    ai.yawRate *= Math.exp(-(2.05 - ai.driftAmount * 0.35 - ai.recovery * 0.1) * dt);
     ai.heading += ai.yawRate * dt;
 
     const aiFwd2 = new THREE.Vector2(Math.sin(ai.heading), Math.cos(ai.heading));
@@ -1150,10 +1254,24 @@ function tick(now) {
 
     ai.x += ai.vx * dt;
     ai.z += ai.vz * dt;
-    ai.t = trackTAt(ai.x, ai.z);
+    const nearestAfter = nearestTrackSample(ai.x, ai.z, 220, ai.t, 0.1);
+    ai.t = nearestAfter.t;
+    ai.trackError = nearestAfter.signedOffset;
+
+    const roadError = Math.abs(nearestAfter.signedOffset) / Math.max(1, roadW * 0.5);
+    const instability = Math.abs(aiVLateral) / 32 + Math.abs(headingErr) / 1.1 + roadError + ai.recovery * 0.2;
+    ai.stability = clamp(1 - instability * 0.42, 0, 1);
+    if (instability > 1.28) {
+      learn.attack = clamp(learn.attack - dt * 0.28, 0.82, 1.18);
+      learn.mistakes += dt;
+    } else if (!blockAhead && speedError < 2 && cornerNeed < 0.7) {
+      learn.attack = clamp(learn.attack + dt * 0.05, 0.82, 1.18);
+    }
+    learn.samples += dt;
 
     const aiCp = checkpoints[ai.nextCp];
     if (new THREE.Vector2(ai.x, ai.z).distanceTo(new THREE.Vector2(aiCp.x, aiCp.z)) < 30) {
+      ai.lastLearnIdx = segmentIdx;
       ai.nextCp += 1;
       if (ai.nextCp >= checkpoints.length) {
         ai.nextCp = 0;
@@ -1164,33 +1282,46 @@ function tick(now) {
     if (ai.cpCycleReady && ai.t < 0.03) {
       ai.lap += 1;
       ai.cpCycleReady = false;
+      ai.learn.forEach((seg) => {
+        if (seg.samples > 0.8) {
+          const settle = clamp(seg.mistakes / seg.samples, 0, 1.4);
+          seg.attack = clamp(seg.attack + (0.035 - settle * 0.06), 0.82, 1.18);
+          seg.samples = 0;
+          seg.mistakes = 0;
+        }
+      });
     }
 
     const dxPR = state.x - ai.x;
     const dzPR = state.z - ai.z;
     const distPR = Math.hypot(dxPR, dzPR) || 0.0001;
-    const minDist = 12.5;
+    const minDist = 12.6;
     if (distPR < minDist) {
       const nx = dxPR / distPR;
       const nz = dzPR / distPR;
       const push = minDist - distPR;
 
-      state.x += nx * push * 0.58;
-      state.z += nz * push * 0.58;
-      ai.x -= nx * push * 0.42;
-      ai.z -= nz * push * 0.42;
+      state.x += nx * push * 0.52;
+      state.z += nz * push * 0.52;
+      ai.x -= nx * push * 0.48;
+      ai.z -= nz * push * 0.48;
 
       const playerV = new THREE.Vector2(state.vx, state.vz);
       const rivalV = new THREE.Vector2(ai.vx, ai.vz);
       const relN = (playerV.x - rivalV.x) * nx + (playerV.y - rivalV.y) * nz;
 
       if (relN < 0) {
-        const j = -relN * 0.72;
+        const j = -relN * 0.52;
         state.vx += nx * j;
         state.vz += nz * j;
-        ai.vx -= nx * j * 0.85;
-        ai.vz -= nz * j * 0.85;
-        state.yawRate += (Math.random() - 0.5) * 0.25;
+        ai.vx -= nx * j * 0.78;
+        ai.vz -= nz * j * 0.78;
+        ai.recovery = clamp(ai.recovery + 0.18, 0, 1.2);
+        learn.attack = clamp(learn.attack - 0.02, 0.82, 1.18);
+        const telemetryDriver = aiTelemetry.current?.drivers?.[i];
+        const telemetrySeg = telemetryDriver?.segments?.[ai.nextCp % telemetryDriver.segments.length];
+        if (telemetrySeg) telemetrySeg.contact += 1;
+        state.yawRate += (Math.random() - 0.5) * 0.18;
         const impact = Math.abs(relN) * 0.2;
         state.damageEngine = clamp(state.damageEngine + impact * 0.45, 0, 100);
         state.damageTire = clamp(state.damageTire + impact * 0.75, 0, 100);
@@ -1281,6 +1412,13 @@ function tick(now) {
   if (crossedForward) {
     const lapMs = now - state.lapStart + state.lapPenaltyMs;
     state.bestLap = state.bestLap ? Math.min(state.bestLap, lapMs) : lapMs;
+    aiTelemetry.current?.laps?.push({
+      lap: state.lap,
+      lapMs,
+      damage: state.damage,
+      tireWear: state.tireWear,
+      penaltyMs: state.lapPenaltyMs,
+    });
     state.lapStart = now;
     state.lapPenaltyMs = 0;
     state.offroadAllWheels = false;
@@ -1291,6 +1429,7 @@ function tick(now) {
       raceFinished = true;
       raceStarted = false;
       keys.clear();
+      finalizeAITelemetrySession('race-finished');
       updateRaceOrder();
       showFinishPanel();
     }
@@ -1307,6 +1446,7 @@ function tick(now) {
     ai.root.rotation.y = ai.heading + ai.yawOffset;
   });
   playerTrackT = trackTAt(state.x, state.z);
+  sampleAIRLStep(now);
   updateRaceOrder();
   updateSkidMarks(dt);
   updateSmoke(dt);
