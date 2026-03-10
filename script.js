@@ -40,7 +40,7 @@ const finishPanel = document.getElementById('finishPanel');
 const finishSummary = document.getElementById('finishSummary');
 const restartBtn = document.getElementById('restartBtn');
 
-const BUILD_VERSION = 'racing v2026.03.10-18';
+const BUILD_VERSION = 'racing v2026.03.10-19';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -297,6 +297,11 @@ const rivals = AI_DRIVERS.map((d, i) => {
     ovz: 0,
     laneOffset: 0,
     laneTarget: 0,
+    steer: 0,
+    vx: 0,
+    vz: 0,
+    yawRate: 0,
+    brakePedal: 0,
     lap: 1,
     nextCp: 0,
     cpCycleReady: false,
@@ -742,6 +747,11 @@ function resetCar() {
     ai.laneOffset = 0;
     ai.laneTarget = 0;
     ai.speedCurrent = ai.speed;
+    ai.steer = 0;
+    ai.vx = 0;
+    ai.vz = 0;
+    ai.yawRate = 0;
+    ai.brakePedal = 0;
     ai.lap = 1;
     ai.nextCp = 0;
     ai.cpCycleReady = false;
@@ -1058,31 +1068,32 @@ function tick(now) {
   state.z += state.vz * dt;
 
   rivals.forEach((ai, i) => {
-    const baseSpeed = ai.speed + Math.sin(now * 0.0009 + i * 0.7) * 2.2;
+    const aiFwd = new THREE.Vector2(Math.sin(ai.heading), Math.cos(ai.heading));
+    const aiRight = new THREE.Vector2(aiFwd.y, -aiFwd.x);
+    let aiVForward = ai.vx * aiFwd.x + ai.vz * aiFwd.y;
+    let aiVLateral = ai.vx * aiRight.x + ai.vz * aiRight.y;
 
-    const rbNow = curve.getPointAt(ai.t);
-    const rbNow2 = curve.getPointAt((ai.t + 0.0022) % 1);
-    const tx = rbNow2.x - rbNow.x;
-    const tz = rbNow2.z - rbNow.z;
-    const tl = Math.hypot(tx, tz) || 1;
-    const dirX = tx / tl;
-    const dirZ = tz / tl;
-    const rightX = -dirZ;
-    const rightZ = dirX;
+    const lookT = (ai.t + 0.016 + clamp(Math.abs(aiVForward) / 2200, 0.005, 0.03)) % 1;
+    const lookP = curve.getPointAt(lookT);
+    const lookP2 = curve.getPointAt((lookT + 0.0022) % 1);
+    const ldx = lookP2.x - lookP.x;
+    const ldz = lookP2.z - lookP.z;
+    const llen = Math.hypot(ldx, ldz) || 1;
+    const lineRightX = -(ldz / llen);
+    const lineRightZ = (ldx / llen);
 
     let blockAhead = false;
     let avoidSign = (i % 2 === 0) ? 1 : -1;
     const checkBlock = (x, z) => {
       const dx = x - ai.x;
       const dz = z - ai.z;
-      const along = dx * dirX + dz * dirZ;
-      const side = dx * rightX + dz * rightZ;
-      if (along > 4 && along < 28 && Math.abs(side) < 5.5) {
+      const along = dx * aiFwd.x + dz * aiFwd.y;
+      const side = dx * aiRight.x + dz * aiRight.y;
+      if (along > 4 && along < 24 && Math.abs(side) < 6.5) {
         blockAhead = true;
         avoidSign = side >= 0 ? -1 : 1;
       }
     };
-
     checkBlock(state.x, state.z);
     rivals.forEach((other) => {
       if (other === ai) return;
@@ -1090,35 +1101,52 @@ function tick(now) {
     });
 
     ai.laneTarget = blockAhead
-      ? avoidSign * (roadW * 0.32)
-      : Math.sin(now * 0.0007 + i * 1.8) * (roadW * 0.16);
-    ai.laneOffset += (ai.laneTarget - ai.laneOffset) * Math.min(1, dt * (2.7 + ai.style.corner * 0.7));
+      ? avoidSign * (roadW * 0.34)
+      : Math.sin(now * 0.00055 + i * 1.6) * (roadW * 0.14);
+    ai.laneOffset += (ai.laneTarget - ai.laneOffset) * Math.min(1, dt * 2.9);
 
-    const targetSpeed = blockAhead ? Math.max(72, baseSpeed - 10) : baseSpeed;
-    ai.speedCurrent += (targetSpeed - ai.speedCurrent) * Math.min(1, dt * 2.8);
-    ai.speedCurrent = clamp(ai.speedCurrent, 68, 130);
+    const targetX = lookP.x + lineRightX * ai.laneOffset;
+    const targetZ = lookP.z + lineRightZ * ai.laneOffset;
+    const toTX = targetX - ai.x;
+    const toTZ = targetZ - ai.z;
+    const toTL = Math.hypot(toTX, toTZ) || 1;
+    const desiredX = toTX / toTL;
+    const desiredZ = toTZ / toTL;
 
-    const tStep = Math.max(0.00002, (ai.speedCurrent * dt) / trackLength);
-    ai.t = (ai.t + tStep) % 1;
+    const cross = aiFwd.x * desiredZ - aiFwd.y * desiredX;
+    const dot = clamp(aiFwd.x * desiredX + aiFwd.y * desiredZ, -1, 1);
+    const headingErr = Math.atan2(cross, dot);
 
-    const rb = curve.getPointAt(ai.t);
-    const rb2 = curve.getPointAt((ai.t + 0.0022) % 1);
-    const rbx = rb2.x - rb.x;
-    const rbz = rb2.z - rb.z;
-    const rbl = Math.hypot(rbx, rbz) || 1;
-    const rvxBase = (rbx / rbl) * ai.speedCurrent;
-    const rvzBase = (rbz / rbl) * ai.speedCurrent;
-    const rrX = -(rbz / rbl);
-    const rrZ = (rbx / rbl);
+    const cornerNeed = Math.abs(headingErr);
+    const throttleTarget = blockAhead ? 0.72 : clamp(1 - cornerNeed * 1.35, 0.38, 1);
+    const brakeTargetAI = cornerNeed > 0.42 ? clamp((cornerNeed - 0.42) * 2.6, 0, 1) : 0;
 
-    ai.ovx += (-ai.ox * (6.2 + ai.style.corner) - ai.ovx * (2.9 + ai.style.corner * 0.4)) * dt;
-    ai.ovz += (-ai.oz * (6.2 + ai.style.corner) - ai.ovz * (2.9 + ai.style.corner * 0.4)) * dt;
-    ai.ox += ai.ovx * dt;
-    ai.oz += ai.ovz * dt;
+    ai.brakePedal += (brakeTargetAI - ai.brakePedal) * Math.min(1, dt * (brakeTargetAI > ai.brakePedal ? 5 : 3));
+    ai.steer += (clamp(-headingErr * 1.9, -0.72, 0.72) - ai.steer) * Math.min(1, dt * 6.8);
 
-    ai.x = rb.x + rrX * ai.laneOffset + ai.ox;
-    ai.z = rb.z + rrZ * ai.laneOffset + ai.oz;
-    ai.heading = Math.atan2(rbx, rbz);
+    const aiGrip = 2.4 * currentCarStats.handling;
+    let aiALong = currentCarStats.accel * throttleTarget;
+    aiALong -= currentCarStats.brake * ai.brakePedal * Math.sign(aiVForward || 1);
+    aiALong -= 1.05 * aiVForward;
+    aiALong -= 0.0048 * aiVForward * Math.abs(aiVForward);
+
+    aiVForward += aiALong * dt;
+    aiVForward = clamp(aiVForward, 0, currentCarStats.topSpeed / 1.18);
+    aiVLateral *= Math.exp(-aiGrip * dt);
+
+    const aiTargetYaw = aiVForward > 0.5 ? (aiVForward / 3.4) * Math.tan(ai.steer) : 0;
+    ai.yawRate += (aiTargetYaw - ai.yawRate) * Math.min(1, dt * 5.2);
+    ai.yawRate *= Math.exp(-1.5 * dt);
+    ai.heading += ai.yawRate * dt;
+
+    const aiFwd2 = new THREE.Vector2(Math.sin(ai.heading), Math.cos(ai.heading));
+    const aiRight2 = new THREE.Vector2(aiFwd2.y, -aiFwd2.x);
+    ai.vx = aiFwd2.x * aiVForward + aiRight2.x * aiVLateral;
+    ai.vz = aiFwd2.y * aiVForward + aiRight2.y * aiVLateral;
+
+    ai.x += ai.vx * dt;
+    ai.z += ai.vz * dt;
+    ai.t = trackTAt(ai.x, ai.z);
 
     const aiCp = checkpoints[ai.nextCp];
     if (new THREE.Vector2(ai.x, ai.z).distanceTo(new THREE.Vector2(aiCp.x, aiCp.z)) < 30) {
@@ -1145,19 +1173,19 @@ function tick(now) {
 
       state.x += nx * push * 0.58;
       state.z += nz * push * 0.58;
-      ai.ox -= nx * push * 0.42;
-      ai.oz -= nz * push * 0.42;
+      ai.x -= nx * push * 0.42;
+      ai.z -= nz * push * 0.42;
 
       const playerV = new THREE.Vector2(state.vx, state.vz);
-      const rivalV = new THREE.Vector2(rvxBase + ai.ovx, rvzBase + ai.ovz);
+      const rivalV = new THREE.Vector2(ai.vx, ai.vz);
       const relN = (playerV.x - rivalV.x) * nx + (playerV.y - rivalV.y) * nz;
 
       if (relN < 0) {
         const j = -relN * 0.72;
         state.vx += nx * j;
         state.vz += nz * j;
-        ai.ovx -= nx * j * 0.85;
-        ai.ovz -= nz * j * 0.85;
+        ai.vx -= nx * j * 0.85;
+        ai.vz -= nz * j * 0.85;
         state.yawRate += (Math.random() - 0.5) * 0.25;
         const impact = Math.abs(relN) * 0.2;
         state.damageEngine = clamp(state.damageEngine + impact * 0.45, 0, 100);
