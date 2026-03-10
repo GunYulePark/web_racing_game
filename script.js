@@ -6,9 +6,15 @@ import { FBXLoader } from 'https://esm.sh/three@0.164.1/examples/jsm/loaders/FBX
 const speedText = document.getElementById('speedText');
 const gearText = document.getElementById('gearText');
 const lapText = document.getElementById('lapText');
+const positionText = document.getElementById('positionText');
+const leaderboardText = document.getElementById('leaderboardText');
 const bestText = document.getElementById('bestText');
 const nowText = document.getElementById('nowText');
 const penaltyText = document.getElementById('penaltyText');
+const damageText = document.getElementById('damageText');
+const partsText = document.getElementById('partsText');
+const slipText = document.getElementById('slipText');
+const pitText = document.getElementById('pitText');
 const buildText = document.getElementById('buildText');
 const throttleBar = document.getElementById('throttleBar');
 const brakeBar = document.getElementById('brakeBar');
@@ -23,13 +29,15 @@ const carStats = document.getElementById('carStats');
 const startMenu = document.getElementById('startMenu');
 const startCarSelect = document.getElementById('startCarSelect');
 const trackSelect = document.getElementById('trackSelect');
+const carPreview = document.getElementById('carPreview');
+const trackPreview = document.getElementById('trackPreview');
 const startRaceBtn = document.getElementById('startRaceBtn');
 const btnLeft = document.getElementById('btnLeft');
 const btnRight = document.getElementById('btnRight');
 const btnBrake = document.getElementById('btnBrake');
 const btnAccel = document.getElementById('btnAccel');
 
-const BUILD_VERSION = 'racing v2026.03.07-12';
+const BUILD_VERSION = 'racing v2026.03.10-16';
 if (buildText) buildText.textContent = BUILD_VERSION;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -69,6 +77,16 @@ const ground = new THREE.Mesh(
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
+function makeProceduralTrack({ n = 40, cx = 0, cz = 0, sx = 1, sz = 1, f }) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const r = f(a);
+    pts.push(new THREE.Vector3(cx + Math.cos(a) * r * sx, 0, cz + Math.sin(a) * r * sz));
+  }
+  return pts;
+}
+
 const TRACKS = {
   classic: [
     new THREE.Vector3(-320, 0, -40),
@@ -88,32 +106,31 @@ const TRACKS = {
     new THREE.Vector3(-280, 0, 260),
     new THREE.Vector3(-355, 0, 120),
   ],
-  stadium: (() => {
-    // mathematically single-loop (no branch/cross), but with long straight + technical sectors
-    const pts = [];
-    const n = 40;
-    const cx = -120;
-    const cz = -20;
-
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-
-      // star-shaped radial function => guaranteed one closed loop
+  stadium: makeProceduralTrack({
+    n: 40, cx: -120, cz: -20, sx: 1.12, sz: 0.78,
+    f: (a) => {
       let r = 520 + 170 * Math.cos(a) - 110 * Math.cos(2 * a) + 55 * Math.sin(3 * a);
-
-      // emulate a long main straight (flatten top sector)
       if (a > 1.1 && a < 2.05) r += 130;
-
-      // technical infield kinks
       if (a > 4.2 && a < 5.0) r -= 90;
-
-      const x = cx + Math.cos(a) * r * 1.12;
-      const z = cz + Math.sin(a) * r * 0.78;
-      pts.push(new THREE.Vector3(x, 0, z));
+      return r;
     }
-
-    return pts;
-  })(),
+  }),
+  coastal: makeProceduralTrack({
+    n: 42, cx: 0, cz: 20, sx: 1.08, sz: 0.82,
+    f: (a) => 500 + 135 * Math.sin(a + 0.35) + 95 * Math.cos(2.6 * a) + 40 * Math.sin(4.2 * a),
+  }),
+  canyon: makeProceduralTrack({
+    n: 38, cx: -40, cz: 0, sx: 1.0, sz: 0.86,
+    f: (a) => {
+      let r = 470 + 190 * Math.cos(a * 1.1) - 75 * Math.sin(a * 2.8);
+      if (a > 2.0 && a < 3.15) r -= 120;
+      return r;
+    }
+  }),
+  nightcity: makeProceduralTrack({
+    n: 44, cx: -20, cz: -10, sx: 1.05, sz: 0.8,
+    f: (a) => 510 + 110 * Math.cos(3 * a) + 80 * Math.sin(2 * a + 0.8),
+  }),
 };
 
 let currentTrackKey = 'stadium';
@@ -126,6 +143,8 @@ let startDir = new THREE.Vector3(0, 0, 1);
 let roadMesh = null;
 let curbMesh = null;
 let startLine = null;
+let pitZoneMesh = null;
+let pitZoneCenter = new THREE.Vector3();
 
 // Continuous road strips (no segment gaps)
 const roadMat = new THREE.MeshStandardMaterial({ color: '#3a4150', roughness: .88, metalness: .03 });
@@ -186,6 +205,7 @@ function setTrack(trackKey = 'classic') {
   if (curbMesh) scene.remove(curbMesh);
   if (roadMesh) scene.remove(roadMesh);
   if (startLine) scene.remove(startLine);
+  if (pitZoneMesh) scene.remove(pitZoneMesh);
 
   curbMesh = buildRibbon(curbW, 0.22, edgeMat);
   roadMesh = buildRibbon(roadW, 0.5, roadMat);
@@ -204,17 +224,23 @@ function setTrack(trackKey = 'classic') {
   startLine.position.set(startP.x, 0.72, startP.z);
   scene.add(startLine);
 
+  pitZoneCenter = startP.clone().add(startDir.clone().multiplyScalar(45));
+  pitZoneMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(roadW * 0.8, 16),
+    new THREE.MeshBasicMaterial({ color: '#5ee0ff', transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+  );
+  pitZoneMesh.rotation.x = -Math.PI / 2;
+  pitZoneMesh.position.set(pitZoneCenter.x, 0.74, pitZoneCenter.z);
+  scene.add(pitZoneMesh);
+
   checkpoints = Array.from({ length: 8 }, (_, i) => curve.getPointAt(i / 8));
+  drawTrackPreview();
   resetCar();
 }
 
 // Car mesh (real sample model via GLB)
 const carRoot = new THREE.Group();
 scene.add(carRoot);
-
-// opponent car
-const rivalRoot = new THREE.Group();
-scene.add(rivalRoot);
 
 // fallback if model fails
 const fallback = new THREE.Mesh(
@@ -224,12 +250,53 @@ const fallback = new THREE.Mesh(
 fallback.position.y = 1.4;
 carRoot.add(fallback);
 
-const rivalFallback = new THREE.Mesh(
-  new THREE.BoxGeometry(7.8, 1.5, 14.2),
-  new THREE.MeshStandardMaterial({ color: '#ff7a7a', roughness: 0.45, metalness: 0.2 })
-);
-rivalFallback.position.y = 1.4;
-rivalRoot.add(rivalFallback);
+const AI_DRIVERS = [
+  { name: 'NOVA', color: '#ff8b7a', style: { pace: 98, corner: 0.85, jitter: 0.6 } },
+  { name: 'RUNE', color: '#7ab6ff', style: { pace: 96, corner: 1.2, jitter: 0.35 } },
+  { name: 'ECHO', color: '#9bff96', style: { pace: 94, corner: 0.95, jitter: 0.9 } },
+  { name: 'BLITZ', color: '#ffd86b', style: { pace: 101, corner: 0.75, jitter: 0.5 } },
+  { name: 'MIRA', color: '#d69bff', style: { pace: 95, corner: 1.05, jitter: 0.4 } },
+];
+
+function createAICar(color) {
+  const root = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(7.8, 1.4, 14.2),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.2 })
+  );
+  body.position.y = 1.3;
+  const canopy = new THREE.Mesh(
+    new THREE.BoxGeometry(5.2, 1.1, 5.8),
+    new THREE.MeshStandardMaterial({ color: '#1f2430', roughness: 0.3, metalness: 0.45 })
+  );
+  canopy.position.set(0, 2.05, -0.2);
+  root.add(body, canopy);
+  return root;
+}
+
+const rivals = AI_DRIVERS.map((d, i) => {
+  const root = createAICar(d.color);
+  scene.add(root);
+  return {
+    id: `ai-${i + 1}`,
+    name: d.name,
+    root,
+    t: (0.95 - i * 0.045 + 1) % 1,
+    speed: d.style.pace,
+    x: 0,
+    z: 0,
+    heading: 0,
+    yawOffset: 0,
+    ox: 0,
+    oz: 0,
+    ovx: 0,
+    ovz: 0,
+    lap: 1,
+    nextCp: 0,
+    cpCycleReady: false,
+    style: d.style,
+  };
+});
 
 const loader = new GLTFLoader();
 const draco = new DRACOLoader();
@@ -271,26 +338,6 @@ let currentCarKey = carSelect?.value || 'ferrari';
 let currentCarStats = CAR_MODELS[currentCarKey]?.stats || CAR_MODELS.ferrari.stats;
 let currentCarYawOffset = CAR_MODELS[currentCarKey]?.yawOffset || 0;
 
-const RIVAL_MODELS = {
-  lowpoly1: {
-    type: 'fbx',
-    url: './assets/cars/lowpoly/car_1.fbx',
-    texture: './assets/cars/lowpoly/car_texture_1.png',
-    rotFix: { x: -Math.PI / 2, y: 0, z: 0 },
-    yawOffset: -Math.PI / 2,
-    tint: '#ff8b7a',
-  },
-  lowpoly2: {
-    type: 'fbx',
-    url: './assets/cars/lowpoly/car_2.fbx',
-    texture: './assets/cars/lowpoly/car_texture_2.png',
-    rotFix: { x: -Math.PI / 2, y: 0, z: 0 },
-    yawOffset: -Math.PI / 2,
-    tint: '#7ab6ff',
-  },
-};
-
-let currentRivalYawOffset = RIVAL_MODELS.lowpoly2.yawOffset;
 
 function updateCarStatsUI() {
   const cfg = CAR_MODELS[currentCarKey] || CAR_MODELS.ferrari;
@@ -329,46 +376,6 @@ function setFallbackVisible(visible) {
   fallback.visible = visible;
 }
 
-function pickRivalKey() {
-  return currentCarKey === 'lowpoly2' ? 'lowpoly1' : 'lowpoly2';
-}
-
-function loadRivalModel() {
-  const key = pickRivalKey();
-  const cfg = RIVAL_MODELS[key] || RIVAL_MODELS.lowpoly2;
-  currentRivalYawOffset = cfg.yawOffset || 0;
-
-  fbxLoader.load(
-    cfg.url,
-    (model) => {
-      const tex = cfg.texture ? texLoader.load(cfg.texture) : null;
-      if (tex) {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.flipY = false;
-      }
-
-      model.traverse((obj) => {
-        if (!obj.isMesh) return;
-        const base = Array.isArray(obj.material) ? obj.material[0] : obj.material;
-        obj.material = new THREE.MeshStandardMaterial({
-          map: tex || null,
-          color: new THREE.Color(cfg.tint || '#ff8b7a').multiply(base?.color || new THREE.Color('#ffffff')),
-          roughness: 0.72,
-          metalness: 0.14,
-        });
-      });
-
-      rivalRoot.clear();
-      rivalRoot.add(prepareModel(model, Math.PI, cfg.rotFix));
-    },
-    undefined,
-    () => {
-      rivalRoot.clear();
-      rivalRoot.add(rivalFallback);
-      currentRivalYawOffset = 0;
-    }
-  );
-}
 
 function loadCarModel(key = 'ferrari') {
   currentCarKey = CAR_MODELS[key] ? key : 'ferrari';
@@ -443,13 +450,17 @@ function syncCarSelectors(value) {
 carSelect?.addEventListener('change', () => {
   syncCarSelectors(carSelect.value);
   loadCarModel(carSelect.value);
-  loadRivalModel();
+  drawCarPreview();
 });
 
 startCarSelect?.addEventListener('change', () => {
   syncCarSelectors(startCarSelect.value);
   loadCarModel(startCarSelect.value);
-  loadRivalModel();
+  drawCarPreview();
+});
+
+trackSelect?.addEventListener('change', () => {
+  drawTrackPreview();
 });
 
 startRaceBtn?.addEventListener('click', () => {
@@ -457,7 +468,6 @@ startRaceBtn?.addEventListener('click', () => {
   const selectedCar = startCarSelect?.value || 'ferrari';
   syncCarSelectors(selectedCar);
   loadCarModel(selectedCar);
-  loadRivalModel();
   raceStarted = true;
   if (startMenu) startMenu.style.display = 'none';
   setupAudio();
@@ -495,19 +505,18 @@ const state = {
   prevGateDist: 0,
   startGateArmed: false,
   cpCycleReady: false,
+  damage: 0,
+  damageEngine: 0,
+  damageTire: 0,
+  damageAero: 0,
+  repairTimer: 0,
+  slipstreamBoost: 0,
+  pitStopsUsed: 0,
+  canUsePitThisLap: true,
 };
 
-const rival = {
-  t: 0.985,
-  speed: 86,
-  x: 0,
-  z: 0,
-  heading: 0,
-  ox: 0,
-  oz: 0,
-  ovx: 0,
-  ovz: 0,
-};
+let playerTrackT = 0;
+let raceOrder = [];
 
 const keys = new Set();
 addEventListener('keydown', (e) => {
@@ -578,6 +587,68 @@ function describeArc(cx, cy, r, startDeg, endDeg) {
   return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 0 ${e.x} ${e.y}`;
 }
 
+function drawCarPreview() {
+  if (!carPreview) return;
+  const ctx = carPreview.getContext('2d');
+  if (!ctx) return;
+  const w = carPreview.width;
+  const h = carPreview.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#121926';
+  ctx.fillRect(0, 0, w, h);
+
+  const cfg = CAR_MODELS[currentCarKey] || CAR_MODELS.ferrari;
+  const color = currentCarKey === 'ferrari' ? '#e94f55' : currentCarKey === 'lowpoly1' ? '#58a7ff' : '#7be08a';
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(70, 44, 180, 34, 12);
+  ctx.fill();
+  ctx.fillStyle = '#1f2430';
+  ctx.fillRect(116, 38, 88, 20);
+  ctx.fillStyle = '#dce8ff';
+  ctx.font = '12px Inter, Arial';
+  ctx.fillText(cfg.label, 12, 20);
+  ctx.fillText(`TOP ${cfg.stats.topSpeed} | ACC ${cfg.stats.accel} | HDL ${(cfg.stats.handling * 100).toFixed(0)}%`, 12, 106);
+}
+
+function drawTrackPreview() {
+  if (!trackPreview) return;
+  const ctx = trackPreview.getContext('2d');
+  if (!ctx) return;
+  const w = trackPreview.width;
+  const h = trackPreview.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#121926';
+  ctx.fillRect(0, 0, w, h);
+
+  const pts = TRACKS[trackSelect?.value || currentTrackKey] || TRACKS.stadium;
+  const bounds = pts.reduce((acc, p) => ({
+    minX: Math.min(acc.minX, p.x), maxX: Math.max(acc.maxX, p.x),
+    minZ: Math.min(acc.minZ, p.z), maxZ: Math.max(acc.maxZ, p.z),
+  }), { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity });
+
+  const pad = 14;
+  const sx = (w - pad * 2) / Math.max(1, (bounds.maxX - bounds.minX));
+  const sz = (h - pad * 2) / Math.max(1, (bounds.maxZ - bounds.minZ));
+
+  ctx.strokeStyle = '#9ec4ff';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const x = pad + (p.x - bounds.minX) * sx;
+    const y = pad + (p.z - bounds.minZ) * sz;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.stroke();
+
+  const sp = pts[0];
+  const x0 = pad + (sp.x - bounds.minX) * sx;
+  const y0 = pad + (sp.z - bounds.minZ) * sz;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x0 - 3, y0 - 3, 6, 6);
+}
+
 function drawMiniMap() {
   mm.clearRect(0, 0, minimap.width, minimap.height);
   mm.fillStyle = 'rgba(18,24,38,.78)';
@@ -604,9 +675,11 @@ function drawMiniMap() {
   mm.fillStyle = '#ffd86b';
   mm.beginPath(); mm.arc(cpM.x, cpM.y, 4.5, 0, Math.PI * 2); mm.fill();
 
-  const rivalM = mapToMini(rival.x, rival.z);
-  mm.fillStyle = '#ff8b7a';
-  mm.beginPath(); mm.arc(rivalM.x, rivalM.y, 3.5, 0, Math.PI * 2); mm.fill();
+  rivals.forEach((ai) => {
+    const rivalM = mapToMini(ai.x, ai.z);
+    mm.fillStyle = ai.root.children[0]?.material?.color?.getStyle?.() || '#ff8b7a';
+    mm.beginPath(); mm.arc(rivalM.x, rivalM.y, 3.3, 0, Math.PI * 2); mm.fill();
+  });
 
   const carM = mapToMini(state.x, state.z);
   mm.fillStyle = '#5fe4ff';
@@ -629,21 +702,35 @@ function resetCar() {
   state.prevGateDist = 0;
   state.startGateArmed = false;
   state.cpCycleReady = false;
+  state.damage = 0;
+  state.damageEngine = 0;
+  state.damageTire = 0;
+  state.damageAero = 0;
+  state.repairTimer = 0;
+  state.slipstreamBoost = 0;
+  state.pitStopsUsed = 0;
+  state.canUsePitThisLap = true;
 
   const gateFwd = new THREE.Vector2(startDir.x, startDir.z).normalize();
   const gateDelta = new THREE.Vector2(state.x - startP.x, state.z - startP.z);
   state.prevGateDist = gateDelta.dot(gateFwd);
 
-  rival.t = 0.985; // start just behind player
-  rival.ox = 0;
-  rival.oz = 0;
-  rival.ovx = 0;
-  rival.ovz = 0;
-  const rp = curve.getPointAt(rival.t);
-  const rp2 = curve.getPointAt((rival.t + 0.002) % 1);
-  rival.x = rp.x;
-  rival.z = rp.z;
-  rival.heading = Math.atan2(rp2.x - rp.x, rp2.z - rp.z);
+  rivals.forEach((ai, i) => {
+    ai.t = (0.95 - i * 0.045 + 1) % 1;
+    ai.ox = 0;
+    ai.oz = 0;
+    ai.ovx = 0;
+    ai.ovz = 0;
+    ai.lap = 1;
+    ai.nextCp = 0;
+    ai.cpCycleReady = false;
+    const rp = curve.getPointAt(ai.t);
+    const rp2 = curve.getPointAt((ai.t + 0.002) % 1);
+    ai.x = rp.x;
+    ai.z = rp.z;
+    ai.heading = Math.atan2(rp2.x - rp.x, rp2.z - rp.z);
+  });
+  raceOrder = [];
 
   // clear skid marks + smoke
   skidMarks.length = 0;
@@ -654,8 +741,9 @@ function resetCar() {
 
 syncCarSelectors(currentCarKey);
 loadCarModel(currentCarKey);
-loadRivalModel();
 if (trackSelect) trackSelect.value = 'stadium';
+drawCarPreview();
+drawTrackPreview();
 setTrack('stadium');
 
 function spawnSkidMark(x, z, heading, alpha = 0.25) {
@@ -757,6 +845,49 @@ function roadDistanceSq(x, z) {
   return nearestTrackSample(x, z).distSq;
 }
 
+function trackTAt(x, z, samples = 260) {
+  let bestT = 0;
+  let min = Infinity;
+  for (let i = 0; i < samples; i++) {
+    const t = i / samples;
+    const p = curve.getPointAt(t);
+    const dx = x - p.x;
+    const dz = z - p.z;
+    const d = dx * dx + dz * dz;
+    if (d < min) {
+      min = d;
+      bestT = t;
+    }
+  }
+  return bestT;
+}
+
+function lapProgress(lap, nextCp, t) {
+  const cpFrac = clamp(nextCp / checkpoints.length, 0, 1);
+  const mix = cpFrac * 0.65 + t * 0.35;
+  return (lap - 1) + mix;
+}
+
+function updateRaceOrder() {
+  const entries = [{ name: 'YOU', progress: lapProgress(state.lap, state.nextCp, playerTrackT), isPlayer: true }];
+  rivals.forEach((ai) => {
+    entries.push({
+      name: ai.name,
+      progress: lapProgress(ai.lap, ai.nextCp, ai.t),
+      isPlayer: false,
+    });
+  });
+
+  entries.sort((a, b) => b.progress - a.progress);
+  raceOrder = entries;
+
+  const playerPos = entries.findIndex((e) => e.isPlayer) + 1;
+  if (positionText) positionText.textContent = `P${playerPos}/${entries.length}`;
+  if (leaderboardText) {
+    leaderboardText.textContent = entries.map((e, i) => `${i + 1}. ${e.name}`).join('\n');
+  }
+}
+
 // sound (engine-like layered synth)
 let ac, oscLow, oscHigh, gainLow, gainHigh, masterGain, filter;
 async function setupAudio() {
@@ -820,6 +951,22 @@ function tick(now) {
   const distSq = roadDistanceSq(state.x, state.z);
   const onRoad = distSq < (roadW * 0.9) ** 2;
 
+  let slipstreamTarget = null;
+  let nearestAhead = Infinity;
+  rivals.forEach((ai) => {
+    const dx = ai.x - state.x;
+    const dz = ai.z - state.z;
+    const along = dx * fwd.x + dz * fwd.y;
+    const side = Math.abs(dx * right.x + dz * right.y);
+    if (along > 8 && along < 42 && side < 6 && along < nearestAhead) {
+      nearestAhead = along;
+      slipstreamTarget = ai;
+    }
+  });
+
+  const targetSlipBoost = slipstreamTarget ? clamp((42 - nearestAhead) / 42, 0.12, 1) : 0;
+  state.slipstreamBoost += (targetSlipBoost - state.slipstreamBoost) * Math.min(1, dt * 3.2);
+
   const wheelHalf = 2.4;
   const leftWheelDistSq = roadDistanceSq(state.x + right.x * wheelHalf, state.z + right.y * wheelHalf);
   const rightWheelDistSq = roadDistanceSq(state.x - right.x * wheelHalf, state.z - right.y * wheelHalf);
@@ -829,9 +976,16 @@ function tick(now) {
   }
   state.offroadAllWheels = bothWheelsOffRoad;
 
-  const grip = onRoad ? (2.4 * currentCarStats.handling) : (1.0 * currentCarStats.handling * 0.72);
+  const engineFactor = 1 - clamp(state.damageEngine / 170, 0, 0.5);
+  const tireFactor = 1 - clamp(state.damageTire / 130, 0, 0.55);
+  const aeroFactor = 1 - clamp(state.damageAero / 180, 0, 0.35);
+  const damageFactor = (engineFactor * 0.5) + (tireFactor * 0.3) + (aeroFactor * 0.2);
 
-  const steerLimit = 0.62 * currentCarStats.handling * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
+  const grip = onRoad
+    ? (2.4 * currentCarStats.handling * tireFactor)
+    : (1.0 * currentCarStats.handling * 0.72 * tireFactor);
+
+  const steerLimit = 0.62 * currentCarStats.handling * tireFactor * (0.35 + 0.65 * Math.max(0, 1 - speed / 120));
   const steerTarget = steerIn * steerLimit;
   state.steer += (steerTarget - state.steer) * Math.min(1, dt * 7.5);
 
@@ -839,7 +993,7 @@ function tick(now) {
   const reverseIntent = brake > 0.2 && throttle === 0 && Math.abs(vForward) < 9;
 
   if (throttle) {
-    aLong += currentCarStats.accel;
+    aLong += currentCarStats.accel * damageFactor + 20 * state.slipstreamBoost;
   } else if (reverseIntent) {
     // hold brake at low speed -> engage reverse
     aLong -= (currentCarStats.accel * 0.62) * brake;
@@ -856,7 +1010,8 @@ function tick(now) {
 
   vForward += aLong * dt;
   const reverseMax = -136;
-  vForward = clamp(vForward, reverseMax, currentCarStats.topSpeed / 1.18);
+  const topSpeedWithEffects = (currentCarStats.topSpeed * damageFactor + 16 * state.slipstreamBoost) / 1.18;
+  vForward = clamp(vForward, reverseMax, topSpeedWithEffects);
   vLateral *= Math.exp(-grip * dt);
 
   const targetYaw = Math.abs(vForward) > 0.5 ? (vForward / 3.4) * Math.tan(state.steer) : 0;
@@ -872,56 +1027,96 @@ function tick(now) {
   state.x += state.vx * dt;
   state.z += state.vz * dt;
 
-  // rival AI follows racing line
-  rival.t = (rival.t + (rival.speed * dt) / trackLength) % 1;
-  const rb = curve.getPointAt(rival.t);
-  const rb2 = curve.getPointAt((rival.t + 0.002) % 1);
-  const rbx = rb2.x - rb.x;
-  const rbz = rb2.z - rb.z;
-  const rbl = Math.hypot(rbx, rbz) || 1;
-  const rvxBase = (rbx / rbl) * rival.speed;
-  const rvzBase = (rbz / rbl) * rival.speed;
+  rivals.forEach((ai, i) => {
+    const wiggle = Math.sin(now * 0.0011 * (0.8 + ai.style.jitter) + i * 1.7) * 0.0015 * ai.style.jitter;
+    ai.t = (ai.t + ((ai.speed + Math.sin(now * 0.001 + i) * 3) * dt) / trackLength + wiggle + 1) % 1;
 
-  // spring back to line for smooth bounce return
-  rival.ovx += (-rival.ox * 7.5 - rival.ovx * 3.6) * dt;
-  rival.ovz += (-rival.oz * 7.5 - rival.ovz * 3.6) * dt;
-  rival.ox += rival.ovx * dt;
-  rival.oz += rival.ovz * dt;
+    const rb = curve.getPointAt(ai.t);
+    const rb2 = curve.getPointAt((ai.t + 0.0022) % 1);
+    const rbx = rb2.x - rb.x;
+    const rbz = rb2.z - rb.z;
+    const rbl = Math.hypot(rbx, rbz) || 1;
+    const rvxBase = (rbx / rbl) * ai.speed;
+    const rvzBase = (rbz / rbl) * ai.speed;
 
-  rival.x = rb.x + rival.ox;
-  rival.z = rb.z + rival.oz;
-  rival.heading = Math.atan2(rbx, rbz);
+    ai.ovx += (-ai.ox * (6.2 + ai.style.corner) - ai.ovx * (2.9 + ai.style.corner * 0.4)) * dt;
+    ai.ovz += (-ai.oz * (6.2 + ai.style.corner) - ai.ovz * (2.9 + ai.style.corner * 0.4)) * dt;
+    ai.ox += ai.ovx * dt;
+    ai.oz += ai.ovz * dt;
 
-  // player vs rival collision (mutual bounce)
-  const dxPR = state.x - rival.x;
-  const dzPR = state.z - rival.z;
-  const distPR = Math.hypot(dxPR, dzPR) || 0.0001;
-  const minDist = 12.5;
-  if (distPR < minDist) {
-    const nx = dxPR / distPR;
-    const nz = dzPR / distPR;
-    const push = (minDist - distPR);
+    ai.x = rb.x + ai.ox;
+    ai.z = rb.z + ai.oz;
+    ai.heading = Math.atan2(rbx, rbz);
 
-    state.x += nx * push * 0.58;
-    state.z += nz * push * 0.58;
-    rival.ox -= nx * push * 0.42;
-    rival.oz -= nz * push * 0.42;
-
-    const playerV = new THREE.Vector2(state.vx, state.vz);
-    const rivalV = new THREE.Vector2(rvxBase + rival.ovx, rvzBase + rival.ovz);
-    const relN = (playerV.x - rivalV.x) * nx + (playerV.y - rivalV.y) * nz;
-
-    if (relN < 0) {
-      const j = -relN * 0.72;
-      state.vx += nx * j;
-      state.vz += nz * j;
-      rival.ovx -= nx * j * 0.85;
-      rival.ovz -= nz * j * 0.85;
-      state.yawRate += (Math.random() - 0.5) * 0.25;
+    const aiCp = checkpoints[ai.nextCp];
+    if (new THREE.Vector2(ai.x, ai.z).distanceTo(new THREE.Vector2(aiCp.x, aiCp.z)) < 30) {
+      ai.nextCp += 1;
+      if (ai.nextCp >= checkpoints.length) {
+        ai.nextCp = 0;
+        ai.cpCycleReady = true;
+      }
     }
+
+    if (ai.cpCycleReady && ai.t < 0.03) {
+      ai.lap += 1;
+      ai.cpCycleReady = false;
+    }
+
+    const dxPR = state.x - ai.x;
+    const dzPR = state.z - ai.z;
+    const distPR = Math.hypot(dxPR, dzPR) || 0.0001;
+    const minDist = 12.5;
+    if (distPR < minDist) {
+      const nx = dxPR / distPR;
+      const nz = dzPR / distPR;
+      const push = minDist - distPR;
+
+      state.x += nx * push * 0.58;
+      state.z += nz * push * 0.58;
+      ai.ox -= nx * push * 0.42;
+      ai.oz -= nz * push * 0.42;
+
+      const playerV = new THREE.Vector2(state.vx, state.vz);
+      const rivalV = new THREE.Vector2(rvxBase + ai.ovx, rvzBase + ai.ovz);
+      const relN = (playerV.x - rivalV.x) * nx + (playerV.y - rivalV.y) * nz;
+
+      if (relN < 0) {
+        const j = -relN * 0.72;
+        state.vx += nx * j;
+        state.vz += nz * j;
+        ai.ovx -= nx * j * 0.85;
+        ai.ovz -= nz * j * 0.85;
+        state.yawRate += (Math.random() - 0.5) * 0.25;
+        const impact = Math.abs(relN) * 0.2;
+        state.damageEngine = clamp(state.damageEngine + impact * 0.45, 0, 100);
+        state.damageTire = clamp(state.damageTire + impact * 0.75, 0, 100);
+        state.damageAero = clamp(state.damageAero + impact * 0.6, 0, 100);
+      }
+    }
+  });
+
+  if (!onRoad && Math.abs(vForward) > 40) {
+    state.damageEngine = clamp(state.damageEngine + dt * 0.8, 0, 100);
+    state.damageTire = clamp(state.damageTire + dt * 1.8, 0, 100);
+    state.damageAero = clamp(state.damageAero + dt * 1.2, 0, 100);
   }
 
-
+  const pitDist = Math.hypot(state.x - pitZoneCenter.x, state.z - pitZoneCenter.z);
+  const inPitZone = pitDist < 15;
+  const pitActive = inPitZone && Math.abs(vForward) < 9 && state.canUsePitThisLap;
+  if (pitActive) {
+    state.repairTimer += dt;
+    state.damageEngine = clamp(state.damageEngine - dt * 11, 0, 100);
+    state.damageTire = clamp(state.damageTire - dt * 16, 0, 100);
+    state.damageAero = clamp(state.damageAero - dt * 13, 0, 100);
+    if (state.repairTimer > 1.8) {
+      state.canUsePitThisLap = false;
+      state.pitStopsUsed += 1;
+      state.repairTimer = 0;
+    }
+  } else {
+    state.repairTimer = Math.max(0, state.repairTimer - dt * 0.8);
+  }
 
   // skid mark trigger (hard brake / lateral slip)
   state.skidCd = Math.max(0, state.skidCd - dt);
@@ -983,15 +1178,21 @@ function tick(now) {
     state.offroadAllWheels = false;
     state.cpCycleReady = false;
     state.lap++;
+    state.canUsePitThisLap = true;
   }
 
+  state.damage = clamp((state.damageEngine * 0.4) + (state.damageTire * 0.35) + (state.damageAero * 0.25), 0, 100);
   state.prevGateDist = gateDist;
 
   // place meshes
   carRoot.position.set(state.x, 0, state.z);
   carRoot.rotation.y = state.heading + currentCarYawOffset;
-  rivalRoot.position.set(rival.x, 0, rival.z);
-  rivalRoot.rotation.y = rival.heading + currentRivalYawOffset;
+  rivals.forEach((ai) => {
+    ai.root.position.set(ai.x, 0, ai.z);
+    ai.root.rotation.y = ai.heading + ai.yawOffset;
+  });
+  playerTrackT = trackTAt(state.x, state.z);
+  updateRaceOrder();
   updateSkidMarks(dt);
   updateSmoke(dt);
 
@@ -1031,6 +1232,10 @@ function tick(now) {
   bestText.textContent = state.bestLap ? fmt(state.bestLap) : '--';
   nowText.textContent = fmt((now - state.lapStart) + state.lapPenaltyMs);
   penaltyText.textContent = `+${(state.lapPenaltyMs / 1000).toFixed(3)}s`;
+  if (damageText) damageText.textContent = `${state.damage.toFixed(0)}%${state.repairTimer > 0.2 ? ' (REPAIR)' : ''}`;
+  if (partsText) partsText.textContent = `ENG ${state.damageEngine.toFixed(0)} / TIR ${state.damageTire.toFixed(0)} / AERO ${state.damageAero.toFixed(0)}`;
+  if (slipText) slipText.textContent = state.slipstreamBoost > 0.1 ? `ON +${(state.slipstreamBoost * 100).toFixed(0)}%` : 'OFF';
+  if (pitText) pitText.textContent = state.canUsePitThisLap ? `READY (${state.pitStopsUsed})` : `USED (${state.pitStopsUsed})`;
   throttleBar.style.width = `${throttle * 100}%`;
   brakeBar.style.width = `${brake * 100}%`;
   rpmBar.style.width = `${state.rpm * 100}%`;

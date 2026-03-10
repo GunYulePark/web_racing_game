@@ -16,11 +16,17 @@
         <option value="lowpoly1">Low Poly Car 1</option>
         <option value="lowpoly2">Low Poly Car 2</option>
       </select>
+      <canvas id="carPreview" class="setup-preview" width="320" height="120"></canvas>
+
       <label>트랙 선택</label>
       <select id="trackSelect" class="car-select">
         <option value="stadium" selected>Stadium Circuit (기본)</option>
         <option value="classic">Classic Track</option>
+        <option value="coastal">Coastal Ring</option>
+        <option value="canyon">Canyon GP</option>
+        <option value="nightcity">Night City Loop</option>
       </select>
+      <canvas id="trackPreview" class="setup-preview" width="320" height="120"></canvas>
       <button id="startRaceBtn" class="start-btn">레이스 시작</button>
     </div>
   </div>
@@ -36,10 +42,15 @@
     </div>
 
     <div class="panel right top">
+      <div>POS <span id="positionText">P1/6</span></div>
       <div>LAP <span id="lapText">1/7</span></div>
       <div>BEST <span id="bestText">--</span></div>
       <div>NOW <span id="nowText">0.000s</span></div>
       <div>PENALTY <span id="penaltyText">+0.000s</span></div>
+      <div>DAMAGE <span id="damageText">0%</span></div>
+      <div>PARTS <span id="partsText">ENG 0 / TIR 0 / AERO 0</span></div>
+      <div>SLIPSTREAM <span id="slipText">OFF</span></div>
+      <div>PIT <span id="pitText">READY</span></div>
       <div>VER <span id="buildText">--</span></div>
       <div class="small">CAR MODEL</div>
       <select id="carSelect" class="car-select">
@@ -49,6 +60,11 @@
       </select>
       <div id="carStats" class="car-stats"></div>
       <div class="small">WASD/방향키 · 브레이크: S/↓/Space · R 재시작</div>
+    </div>
+
+    <div class="panel right mid leaderboard-wrap">
+      <div class="small">RACE ORDER</div>
+      <div id="leaderboardText" class="leaderboard-text"></div>
     </div>
 
     <div class="panel left bottom minimap-wrap">
